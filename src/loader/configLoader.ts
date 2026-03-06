@@ -14,17 +14,18 @@ interface note_ls {
     };
 }
 
-const list: note_ls = {};
 
 import * as vscode from 'vscode';
 
 export class configloader {
 
-
+    
     private onUpdateCallback?: () => void;
     public setOnUpdate(cb: () => void) { this.onUpdateCallback = cb; }
-
+    
     private path = workspacePath;
+    
+    public list: note_ls = {};
 
     // register file system watcher
     public watcher = vscode.workspace.createFileSystemWatcher(
@@ -75,26 +76,26 @@ export class configloader {
                 });
 
             // clear list before repopulating in case of reload
-            for (let key in list) {
-                delete list[key];
+            for (let key in this.list) {
+                delete this.list[key];
             }
 
-            for (const Object of i) {
+            for (const item of i) {
 
-                const refinePath = Object.path;
+                const refinePath = item.path;
 
                 // Plan B: store as nested key map instead of array
-                if (!list[refinePath]) {
-                    list[refinePath] = {};
+                if (!this.list[refinePath]) {
+                    this.list[refinePath] = {};
                 }
 
-                list[refinePath][Object.line] = {
-                    content: Object.content,
-                    color: Object.color ? Object.color : '#ffffff90'
+                this.list[refinePath][item.line] = {
+                    content: item.content,
+                    color: item.color ? item.color : '#ffffff90'
                 };
             }
 
-            console.dir(list, { depth: null, colors: true });
+            console.dir(this.list, { depth: null, colors: true });
             this.onUpdateCallback?.();
         } catch (error) {
             console.error('Marker MVP try-catch caught an error during loadConfig:', error);
@@ -117,21 +118,21 @@ export class configloader {
         console.log(path);
 
         // Find if line exists in the file's marker list
-        if (!list[path]) {
+        if (!this.list[path]) {
             console.log('no  path found');
             return undefined;
         }
 
         // Plan B: O(1) direct key lookup - no array.find() needed
-        const entry = list[path]?.[line];
+        const entry = this.list[path]?.[line];
         console.log(entry);
         return entry ? entry : undefined;
     }
 
     public getTotalCount(): number {
         let count = 0;
-        for (const path in list) {
-            count += Object.keys(list[path]).length;
+        for (const path in this.list) {
+            count += Object.keys(this.list[path]).length;
         }
         return count;
     }

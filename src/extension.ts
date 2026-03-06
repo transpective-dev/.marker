@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 
+let configLoader: configloader;
 
 class MarkerHoverProvider implements vscode.HoverProvider {
 
@@ -37,11 +38,11 @@ class MarkerHoverProvider implements vscode.HoverProvider {
 	}
 }
 
-import path, { join } from 'path';
+import { join } from 'path';
 import { mkdir, writeFile, readdir } from 'fs/promises';
 import { configloader } from './loader/configLoader';
 import { executor } from './executor';
-import { fileURLToPath, pathToFileURL } from 'url';
+import { pathToFileURL } from 'url';
 
 const initializeFile = async () => {
 
@@ -97,28 +98,72 @@ const colorPalette = palette.map(hex => ({
 	iconPath: toSvgIcon(hex),
 }));
 
-export let isHighlightEnabled = true;
-let statusBarItem: vscode.StatusBarItem;
+// key is hex, value is decoration type
+const decorationTypes = new Map<string, vscode.TextEditorDecorationType>();
 
-function updateStatusBar(count: number) {
-	if (!statusBarItem) { return; }
-	statusBarItem.text = `$(list-unordered) .Marker: ${count}`;
-	statusBarItem.tooltip = isHighlightEnabled ? 'Highlighting is ON (Click to toggle)' : 'Highlighting is OFF (Click to toggle)';
-	// statusBarItem.backgroundColor = isHighlightEnabled ? undefined : new vscode.ThemeColor('statusBarItem.errorBackground');
+// Initialize decoration types
+const decoration = () => {
+	for (const hex of palette) {
+		decorationTypes.set(hex, vscode.window.createTextEditorDecorationType({
+			isWholeLine: true,
+			backgroundColor: hex + '35',
+			borderStyle: 'solid',
+			borderWidth: '0 0 0 3px',
+			borderColor: hex,
+			before: {
+                contentText: ' ', // add placeholder
+                margin: '0 0 0 15px' // push text 8px away
+            }
+		}));
+	}
 }
+
+function updateDecos() {
+	const editor = vscode.window.activeTextEditor;
+
+	if (!editor) { return; }
+
+	if (!isHighlightEnabled) {
+		decorationTypes.forEach((value) => {
+			editor.setDecorations(value, []);
+		});
+		console.log('highlighting disabled');
+		return;
+	}
+
+	const currentPath = pathToFileURL(editor.document.uri.fsPath).href;
+	const getList = configLoader.list[currentPath];
+
+	const colorGroups = new Map<string, vscode.Range[]>();
+
+	for (const lineStr in getList) {
+		const line = parseInt(lineStr) - 1; // index - 1
+		const color = getList[lineStr].color;
+		if (!colorGroups.has(color)) {
+			colorGroups.set(color, []);
+		};
+
+		// create a range object, representing the visual range
+		colorGroups.get(color)!.push(new vscode.Range(line, 0, line, 0));
+	}
+	decorationTypes.forEach((style, color) => {
+		const ranges = colorGroups.get(color) || [];
+		editor.setDecorations(style, ranges);
+	});
+
+}
+
+export let isHighlightEnabled = true;
 
 export function activate(context: vscode.ExtensionContext) {
 
+	configLoader = new configloader();
+
+	decoration();
 
 	initializeFile();
 
 	console.log('Marker Loaded!');
-
-	const configLoader = new configloader();
-
-	configLoader.setOnUpdate(() => {
-		updateStatusBar(configLoader.getTotalCount());
-	});
 
 	const provider = new MarkerHoverProvider(configLoader);
 	const hoverRegistration = vscode.languages.registerHoverProvider({ pattern: '**' }, provider);
@@ -185,7 +230,6 @@ export function activate(context: vscode.ExtensionContext) {
 					content: content
 				});
 			}
-			updateStatusBar(configLoader.getTotalCount());
 		});
 
 		qp.show();
@@ -194,16 +238,8 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const highLight = vscode.commands.registerCommand('marker.highLight', () => {
 		isHighlightEnabled = !isHighlightEnabled;
-		vscode.window.showInformationMessage(`Markers Highlighting: ${isHighlightEnabled ? 'ON' : 'OFF'}`);
-		updateStatusBar(configLoader.getTotalCount());
-		// Phase 6 will use this state to re-trigger decorations
+		updateDecos();
 	});
-
-	// Create real status bar item
-	statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-	statusBarItem.command = 'marker.highLight';
-	updateStatusBar(configLoader.getTotalCount());
-	statusBarItem.show();
 
 	forDebug(context, configLoader, 'marker.debug');
 
@@ -211,8 +247,7 @@ export function activate(context: vscode.ExtensionContext) {
 		hoverRegistration,
 		configLoader.watcher,
 		addComment,
-		highLight,
-		statusBarItem
+		highLight
 	];
 
 	context.subscriptions.push(...register);
