@@ -19,6 +19,7 @@ class MarkerHoverProvider implements vscode.HoverProvider {
 	): vscode.ProviderResult<vscode.Hover> {
 
 		const markerText = this.config.get(document.uri.fsPath, position.line + 1);
+
 		console.log(markerText);
 
 		if (markerText) {
@@ -26,12 +27,7 @@ class MarkerHoverProvider implements vscode.HoverProvider {
 			const md = new vscode.MarkdownString();
 			md.isTrusted = true;
 
-			// we have to encode to url because command:marker.editComment?${stage} only accept url
-			const stage = encodeURIComponent(JSON.stringify(markerText));
-
-			md.appendMarkdown(`${markerText.content}\n\n`);
-			md.appendMarkdown(`--- \n\n`);
-			md.appendMarkdown(`[✏️ 编辑](command:marker.editComment?${stage})`);
+			md.appendMarkdown(`${markerText.content}`);
 
 			return new vscode.Hover(md);
 
@@ -45,6 +41,7 @@ import path, { join } from 'path';
 import { mkdir, writeFile, readdir } from 'fs/promises';
 import { configloader } from './loader/configLoader';
 import { executor } from './executor';
+import { fileURLToPath, pathToFileURL } from 'url';
 
 const initializeFile = async () => {
 
@@ -112,54 +109,80 @@ export function activate(context: vscode.ExtensionContext) {
 	const hoverRegistration = vscode.languages.registerHoverProvider({ pattern: '**' }, provider);
 
 	const addComment = vscode.commands.registerCommand('marker.addComment', async () => {
-		const input = await vscode.window.showInputBox({
-			prompt: 'Add Comment\t',
-		});
-
-		if (!input) { return; } // 如果取消了输入内容，就退出
 
 		const editor = vscode.window.activeTextEditor;
+
 		if (!editor) { return; }
 
-		const currentPath = editor.document.uri.fsPath; // get path
-		const currentLine = editor.selection.active.line; // get index
+		const currentPath = pathToFileURL(editor.document.uri.fsPath).href;
+		const currentLine = editor.selection.active.line + 1;
 
-		// color selector - uses the pre-built palette above
-		const colorOption = await vscode.window.showQuickPick(colorPalette, { placeHolder: 'Select Color' });
+		// Check if there is already a comment on the current line (for 'Edit' option)
+		const existing = configLoader.get(currentPath, currentLine);
 
-		if (!colorOption) { return; }
+		const qp = vscode.window.createQuickPick();
+		
+		qp.placeholder = 'Select Option';
 
-		exct.writeIntoMarker(toMarkerPath, {
-			line: currentLine + 1,
-			path: currentPath,
-			color: colorOption.label!,
-			content: input
+		// Build the static option list
+		const editItem: any = [];
+
+		// get/initialize comment
+		qp.items = editItem.push( existing ? {
+			label: 'Edit Comment',
+			description: 'edit',
+		} : {
+			label: 'Add Comment',
+			description: 'add comment',
 		});
+
+		qp.onDidAccept(async () => {
+			const selected = qp.selectedItems[0];
+			qp.hide();
+
+			if (!selected) { return; }
+
+			if (selected.description === 'edit' && existing) {
+				// --- EDIT MODE: prefill and call recover ---
+				const updated = await vscode.window.showInputBox({
+					value: existing.content,
+					prompt: 'Edit comment'
+				});
+				if (updated === undefined) { return; }
+				await exct.recover(toMarkerPath, {
+					line: currentLine,
+					path: currentPath,
+					color: existing.color,
+					content: updated
+				});
+				
+			} else if (selected.description === 'add' && !existing) {
+				// --- NEW COMMENT MODE ---
+				const content = await vscode.window.showInputBox({
+					prompt: 'Add comment'
+				});
+				const colorOption = await vscode.window.showQuickPick(colorPalette, { placeHolder: 'Select Color' });
+				if (!colorOption) { return; }
+				if (content === undefined) { return; }
+				await exct.writeIntoMarker(toMarkerPath, {
+					line: currentLine,
+					path: currentPath,
+					color: colorOption.label!,
+					content: content
+				});
+			}
+		});
+
+		qp.show();
 	});
 
-	const editComment = vscode.commands.registerCommand('marker.editComment', async (args: any) => {
-
-		const input = await vscode.window.showInputBox({
-			value: args.content,
-			prompt: '修改您的注释'
-		});
-		if (input === undefined) {return;}; 
-
-		await exct.recover(toMarkerPath, {
-			line: args.line,
-			path: args.path, 
-			color: args.color,
-			content: input
-		});
-	});
 
 	forDebug(context, configLoader, 'marker.debug');
 
 	const register = [
 		hoverRegistration,
 		configLoader.watcher,
-		addComment,
-		editComment
+		addComment
 	];
 
 	context.subscriptions.push(...register);
@@ -183,5 +206,5 @@ const forDebug = (ctx: any, cl: any, cmd: string) => {
 
 	ctx.subscriptions.push(debug, statusBarItem);
 
-}
+};
 

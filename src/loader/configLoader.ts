@@ -106,17 +106,20 @@ export class configloader {
             path = this.urlMap.get(path)!;
         } else {
             this.urlMap.set(path, pathToFileURL(path).href);
+            path = this.urlMap.get(path)!;
         }
 
-
+        console.log(path);
+        
         // Find if line exists in the file's marker list
         if (!list[path]) {
             console.log('no  path found');
             return undefined;
         }
-
+        
         // Plan B: O(1) direct key lookup - no array.find() needed
         const entry = list[path]?.[line];
+        console.log(entry);
         return entry ? entry : undefined;
     }
 

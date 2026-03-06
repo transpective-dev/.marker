@@ -18,9 +18,12 @@ export class executor {
 
     public async writeIntoMarker(path: string, ctt: ctt) {
 
+        // Guard against double-encoding: if it's already a URL, use it as-is
+        const normalizedPath = ctt.path.startsWith('file://') ? ctt.path : pathToFileURL(ctt.path).href;
+
         const record = {
             line: ctt.line,
-            path: pathToFileURL(ctt.path).href,
+            path: normalizedPath,
             color: ctt.color,
             content: ctt.content
         };
@@ -42,7 +45,8 @@ export class executor {
                 if (!line.trim()) { return false; } // drop empty lines
                 try {
                     const obj = JSON.parse(line);
-                    return !(obj.path === pathToFileURL(ctt.path).href && obj.line === ctt.line);
+                    const targetPath = ctt.path.startsWith('file://') ? ctt.path : pathToFileURL(ctt.path).href;
+                    return !(obj.path === targetPath && obj.line === ctt.line);
                 } catch {
                     return false; // drop corrupted lines
                 }
@@ -52,7 +56,7 @@ export class executor {
         // 3. Build the updated record
         const newRecord = {
             line: ctt.line,
-            path: pathToFileURL(ctt.path).href,
+            path: ctt.path.startsWith('file://') ? ctt.path : pathToFileURL(ctt.path).href,
             color: ctt.color,
             content: ctt.content
         };
