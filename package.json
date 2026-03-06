@@ -19,12 +19,24 @@
       {
         "command": "marker.addComment",
         "title": ".Marker: Add Comment"
+      },
+      {
+        "command": "marker.highLight",
+        "title": "Toggle Marker Highlighting",
+        "icon": "$(eye)"
       }
     ],
     "menus": {
       "editor/context": [
         {
           "command": "marker.addComment",
+          "when": "editorTextFocus",
+          "group": "navigation@1"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "marker.highLight",
           "when": "editorTextFocus",
           "group": "navigation@1"
         }

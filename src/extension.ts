@@ -97,13 +97,28 @@ const colorPalette = palette.map(hex => ({
 	iconPath: toSvgIcon(hex),
 }));
 
+export let isHighlightEnabled = true;
+let statusBarItem: vscode.StatusBarItem;
+
+function updateStatusBar(count: number) {
+	if (!statusBarItem) { return; }
+	statusBarItem.text = `$(list-unordered) .Marker: ${count}`;
+	statusBarItem.tooltip = isHighlightEnabled ? 'Highlighting is ON (Click to toggle)' : 'Highlighting is OFF (Click to toggle)';
+	// statusBarItem.backgroundColor = isHighlightEnabled ? undefined : new vscode.ThemeColor('statusBarItem.errorBackground');
+}
+
 export function activate(context: vscode.ExtensionContext) {
+
 
 	initializeFile();
 
 	console.log('Marker Loaded!');
 
 	const configLoader = new configloader();
+
+	configLoader.setOnUpdate(() => {
+		updateStatusBar(configLoader.getTotalCount());
+	});
 
 	const provider = new MarkerHoverProvider(configLoader);
 	const hoverRegistration = vscode.languages.registerHoverProvider({ pattern: '**' }, provider);
@@ -121,20 +136,19 @@ export function activate(context: vscode.ExtensionContext) {
 		const existing = configLoader.get(currentPath, currentLine);
 
 		const qp = vscode.window.createQuickPick();
-		
+
 		qp.placeholder = 'Select Option';
 
 		// Build the static option list
-		const editItem: any = [];
-
-		// get/initialize comment
-		qp.items = editItem.push( existing ? {
+		const items = [existing ? {
 			label: 'Edit Comment',
 			description: 'edit',
 		} : {
 			label: 'Add Comment',
 			description: 'add comment',
-		});
+		}];
+
+		qp.items = items;
 
 		qp.onDidAccept(async () => {
 			const selected = qp.selectedItems[0];
@@ -155,7 +169,7 @@ export function activate(context: vscode.ExtensionContext) {
 					color: existing.color,
 					content: updated
 				});
-				
+
 			} else if (selected.description === 'add' && !existing) {
 				// --- NEW COMMENT MODE ---
 				const content = await vscode.window.showInputBox({
@@ -171,18 +185,34 @@ export function activate(context: vscode.ExtensionContext) {
 					content: content
 				});
 			}
+			updateStatusBar(configLoader.getTotalCount());
 		});
 
 		qp.show();
 	});
 
 
+	const highLight = vscode.commands.registerCommand('marker.highLight', () => {
+		isHighlightEnabled = !isHighlightEnabled;
+		vscode.window.showInformationMessage(`Markers Highlighting: ${isHighlightEnabled ? 'ON' : 'OFF'}`);
+		updateStatusBar(configLoader.getTotalCount());
+		// Phase 6 will use this state to re-trigger decorations
+	});
+
+	// Create real status bar item
+	statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+	statusBarItem.command = 'marker.highLight';
+	updateStatusBar(configLoader.getTotalCount());
+	statusBarItem.show();
+
 	forDebug(context, configLoader, 'marker.debug');
 
 	const register = [
 		hoverRegistration,
 		configLoader.watcher,
-		addComment
+		addComment,
+		highLight,
+		statusBarItem
 	];
 
 	context.subscriptions.push(...register);

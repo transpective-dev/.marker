@@ -1,5 +1,5 @@
 import { join } from 'path';
-import { workspacePath } from '../extension'
+import { workspacePath } from '../extension';
 import { readdir, readFile } from 'fs/promises';
 import { pathToFileURL } from 'url';
 
@@ -19,6 +19,10 @@ const list: note_ls = {};
 import * as vscode from 'vscode';
 
 export class configloader {
+
+
+    private onUpdateCallback?: () => void;
+    public setOnUpdate(cb: () => void) { this.onUpdateCallback = cb; }
 
     private path = workspacePath;
 
@@ -91,6 +95,7 @@ export class configloader {
             }
 
             console.dir(list, { depth: null, colors: true });
+            this.onUpdateCallback?.();
         } catch (error) {
             console.error('Marker MVP try-catch caught an error during loadConfig:', error);
         }
@@ -110,17 +115,25 @@ export class configloader {
         }
 
         console.log(path);
-        
+
         // Find if line exists in the file's marker list
         if (!list[path]) {
             console.log('no  path found');
             return undefined;
         }
-        
+
         // Plan B: O(1) direct key lookup - no array.find() needed
         const entry = list[path]?.[line];
         console.log(entry);
         return entry ? entry : undefined;
+    }
+
+    public getTotalCount(): number {
+        let count = 0;
+        for (const path in list) {
+            count += Object.keys(list[path]).length;
+        }
+        return count;
     }
 
 }
