@@ -29,17 +29,23 @@ class MarkerHoverProvider implements vscode.HoverProvider {
 }
 
 import path, { join } from 'path';
-import { mkdir, writeFile } from 'fs/promises';
+import { mkdir, writeFile, readdir } from 'fs/promises';
 import { configloader } from './loader/configLoader';
 import { register } from 'module';
 
-const initializeFile = () => {
+const initializeFile = async () => {
 
 	const content= [{
 		path: join(workspacePath, '.marker.json'),
 		line: 1,
 		content: 'welcome to .marker!'
 	}];
+
+	const ls = await readdir(workspacePath);
+
+	if (ls) {
+		return;
+	};
 
 	mkdir(workspacePath, { recursive: true });
 	writeFile(join(workspacePath, '.marker.json'), JSON.stringify(content, null, 2));
@@ -59,6 +65,12 @@ export function activate(context: vscode.ExtensionContext) {
 
 	const provider = new MarkerHoverProvider(configLoader);
 	const hoverRegistration = vscode.languages.registerHoverProvider({ pattern: '**' }, provider);
+
+	const addComment = vscode.commands.registerCommand('marker.addComment', () => {
+		vscode.window.showInputBox({
+			prompt: 'Enter your comment',
+		});
+	});
 
 	forDebug(context, configLoader, 'marker.debug');
 

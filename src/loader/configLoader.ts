@@ -8,6 +8,7 @@ interface note_ls {
         {
             line: number;
             content: string;
+            color: string;
         }
     ]
 }
@@ -67,7 +68,8 @@ export class configloader {
 
                 list[refinePath].push({
                     line: Object.line,
-                    content: Object.content
+                    content: Object.content,
+                    color: Object.color ? Object.color : '#000000'
                 });
             }
 

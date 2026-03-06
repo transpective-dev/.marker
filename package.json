@@ -17,10 +17,19 @@
   "contributes": {
     "commands": [
       {
-        "command": "marker.helloWorld",
-        "title": "Hello World"
+        "command": "marker.addComment",
+        "title": ".Marker: Add Comment"
       }
-    ]
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "marker.addComment",
+          "when": "editorTextFocus",
+          "group": "navigation@1"
+        }
+      ]
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run package",
