@@ -3,14 +3,15 @@ import { workspacePath } from '../extension'
 import { readdir, readFile } from 'fs/promises';
 import { pathToFileURL } from 'url';
 
+// Plan B: two-level nested map - { filepath: { line: { content, color } } }
+// Lookup is O(1) instead of O(n) array.find()
 interface note_ls {
-    [key: string]: [
-        {
-            line: number;
+    [filepath: string]: {
+        [line: number]: {
             content: string;
             color: string;
-        }
-    ]
+        };
+    };
 }
 
 const list: note_ls = {};
@@ -25,18 +26,25 @@ export class configloader {
     public watcher = vscode.workspace.createFileSystemWatcher(
 
         // scope to .marker
-        new vscode.RelativePattern(this.path, '**/*.json')
+        new vscode.RelativePattern(this.path, '**/*.jsonl')
     );
+    // Plan D: debounce timer - only reload after 300ms of silence
+    private debounceTimer: NodeJS.Timeout | null = null;
+
     constructor() {
         // initialize
         this.loadConfig();
         console.log(this.path);
 
-        // Add FileSystemWatcher for hot-reloading
+        // Add FileSystemWatcher for hot-reloading (with debounce)
+        const reload = () => {
+            if (this.debounceTimer) { clearTimeout(this.debounceTimer); }
+            this.debounceTimer = setTimeout(() => this.loadConfig(), 300);
+        };
 
-        this.watcher.onDidChange(() => this.loadConfig());
-        this.watcher.onDidCreate(() => this.loadConfig());
-        this.watcher.onDidDelete(() => this.loadConfig());
+        this.watcher.onDidChange(reload);
+        this.watcher.onDidCreate(reload);
+        this.watcher.onDidDelete(reload);
     }
 
     public async loadConfig() {
@@ -50,9 +58,17 @@ export class configloader {
 
             console.log(newPath);
 
-            const i = await readFile(newPath).then((i) => {
-                return JSON.parse(i.toString('utf-8'));
-            });
+            const raw = await readFile(newPath, 'utf-8');
+
+            // NDJSON: split by line, skip empty lines, parse each line independently
+            // Lines with bad JSON are silently dropped to avoid one bad entry corrupting everything
+            const i = raw
+                .split('\n')
+                .filter(line => line.trim().length > 0)
+                .flatMap(line => {
+                    try { return [JSON.parse(line)]; }
+                    catch { return []; }
+                });
 
             // clear list before repopulating in case of reload
             for (let key in list) {
@@ -61,16 +77,17 @@ export class configloader {
 
             for (const Object of i) {
 
-                const refinePath = pathToFileURL(Object.path).href;
+                const refinePath = Object.path;
 
-                // handle error if list[Object.path] is undefined
-                list[refinePath] = (list[refinePath] || []);
+                // Plan B: store as nested key map instead of array
+                if (!list[refinePath]) {
+                    list[refinePath] = {};
+                }
 
-                list[refinePath].push({
-                    line: Object.line,
+                list[refinePath][Object.line] = {
                     content: Object.content,
-                    color: Object.color ? Object.color : '#000000'
-                });
+                    color: Object.color ? Object.color : '#ffffff90'
+                };
             }
 
             console.dir(list, { depth: null, colors: true });
@@ -80,20 +97,27 @@ export class configloader {
 
     }
 
+    private urlMap = new Map<string, string>();
+
+    // get content from jsonl
     public get(path: string, line: number) {
 
-        const refinePath = pathToFileURL(path).href;
-        console.log(path, line);
-        console.log(refinePath);
+        if (this.urlMap.has(path)) {
+            path = this.urlMap.get(path)!;
+        } else {
+            this.urlMap.set(path, pathToFileURL(path).href);
+        }
+
 
         // Find if line exists in the file's marker list
-        if (!list[refinePath]) {
+        if (!list[path]) {
             console.log('no  path found');
             return undefined;
         }
 
-        const marker = list[refinePath].find(m => m.line === line);
-        return marker ? marker.content : undefined;
+        // Plan B: O(1) direct key lookup - no array.find() needed
+        const entry = list[path]?.[line];
+        return entry ? entry : undefined;
     }
 
 }
