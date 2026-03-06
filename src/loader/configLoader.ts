@@ -21,6 +21,7 @@ export class configloader {
 
     
     private onUpdateCallback?: () => void;
+
     public setOnUpdate(cb: () => void) { this.onUpdateCallback = cb; }
     
     private path = workspacePath;
@@ -96,7 +97,9 @@ export class configloader {
             }
 
             console.dir(this.list, { depth: null, colors: true });
+            
             this.onUpdateCallback?.();
+            
         } catch (error) {
             console.error('Marker MVP try-catch caught an error during loadConfig:', error);
         }

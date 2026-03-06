@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 
 let configLoader: configloader;
 
+let currentEditor: typeof vscode.window.activeTextEditor | null = null;
+
 class MarkerHoverProvider implements vscode.HoverProvider {
 
 	constructor(private config: configloader) { }
@@ -111,27 +113,28 @@ const decoration = () => {
 			borderWidth: '0 0 0 3px',
 			borderColor: hex,
 			before: {
-                contentText: ' ', // add placeholder
-                margin: '0 0 0 15px' // push text 8px away
-            }
+				contentText: ' ', // add placeholder
+				margin: '0 0 0 12px' // push text 8px away
+			}
 		}));
 	}
 }
 
 function updateDecos() {
-	const editor = vscode.window.activeTextEditor;
 
-	if (!editor) { return; }
+	currentEditor = vscode.window.activeTextEditor;
+
+	if (!currentEditor) { return; } // no editor open, nothing to do
 
 	if (!isHighlightEnabled) {
 		decorationTypes.forEach((value) => {
-			editor.setDecorations(value, []);
+			currentEditor!.setDecorations(value, []);
 		});
 		console.log('highlighting disabled');
 		return;
 	}
 
-	const currentPath = pathToFileURL(editor.document.uri.fsPath).href;
+	const currentPath = pathToFileURL(currentEditor!.document.uri.fsPath).href;
 	const getList = configLoader.list[currentPath];
 
 	const colorGroups = new Map<string, vscode.Range[]>();
@@ -144,20 +147,27 @@ function updateDecos() {
 		};
 
 		// create a range object, representing the visual range
+		// range(begin, end)
 		colorGroups.get(color)!.push(new vscode.Range(line, 0, line, 0));
 	}
 	decorationTypes.forEach((style, color) => {
 		const ranges = colorGroups.get(color) || [];
-		editor.setDecorations(style, ranges);
+		currentEditor!.setDecorations(style, ranges);
 	});
 
 }
 
-export let isHighlightEnabled = true;
+export let isHighlightEnabled = false;
 
 export function activate(context: vscode.ExtensionContext) {
 
 	configLoader = new configloader();
+
+	// Sync: when marker data changes, re-draw highlights
+	configLoader.setOnUpdate(() => { updateDecos(); });
+
+	// Sync: when user switches file tab, re-draw for new file
+	vscode.window.onDidChangeActiveTextEditor(() => { updateDecos(); }, null, context.subscriptions);
 
 	decoration();
 
@@ -251,6 +261,9 @@ export function activate(context: vscode.ExtensionContext) {
 	];
 
 	context.subscriptions.push(...register);
+
+	// Initial render after everything is set up
+	updateDecos();
 
 }
 
