@@ -5,3 +5,7 @@ node_modules
 *.vsix
 .marker-storage
 memos
+.agents
+.vscodeignore
+.vscode-test.mjs
+.vscode
