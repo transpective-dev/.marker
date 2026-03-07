@@ -3,7 +3,7 @@
   "displayName": "Marker",
   "description": "A sticky note for programmers",
   "version": "1.0.0",
-  "author": "Transpective Dev Team",
+  "publisher": "Transpective-Dev-Team",
   "engines": {
     "vscode": "^1.100.0"
   },
