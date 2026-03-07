@@ -212,9 +212,12 @@ export function activate(context: vscode.ExtensionContext) {
 	// Sync: when user switches file tab, re-draw for new file
 	vscode.window.onDidChangeActiveTextEditor(() => { updateDecos(); }, null, context.subscriptions);
 
+	vscode.workspace.onDidCloseTextDocument(() => { exct.refresh(configLoader.list); }, null, context.subscriptions);
+
 	// Sync: when user edits code, shift marker line numbers to follow
 	vscode.workspace.onDidChangeTextDocument((event) => {
 		const filePath = executor.normalizePath(event.document.uri.fsPath);
+		console.log('onDidChangeTextDocument: ', filePath);
 		lineTracker.shift(configLoader.list, filePath, event.contentChanges);
 		updateDecos();
 		lensEmitter.fire();
@@ -225,6 +228,8 @@ export function activate(context: vscode.ExtensionContext) {
 	initializeFile();
 
 	console.log('Marker Loaded!');
+
+	vscode.window.showInformationMessage('welcome to .marker!');
 
 	const provider = new MarkerHoverProvider(configLoader);
 
@@ -257,7 +262,14 @@ export function activate(context: vscode.ExtensionContext) {
 			description: 'add',
 		}];
 
+		// push recover
+		items.push({
+			label: 'Refresh Comment Change',
+			description: 'recover',
+		});
+
 		qp.items = items;
+
 
 		qp.onDidAccept(async () => {
 			const selected = qp.selectedItems[0];
@@ -267,17 +279,53 @@ export function activate(context: vscode.ExtensionContext) {
 
 			if (selected.description === 'edit' && existing) {
 				// --- EDIT MODE: prefill and call recover ---
-				const updated = await vscode.window.showInputBox({
-					value: existing.content,
-					prompt: 'Edit comment'
-				});
-				if (updated === undefined) { return; }
-				await exct.recover(toMarkerPath, {
-					line: currentLine,
-					path: currentPath,
-					color: existing.color,
-					content: updated
-				});
+
+				const options = await vscode.window.showQuickPick([
+					{
+						label: 'Edit Content',
+						description: 'e-ctt',
+					},
+					{
+						label: 'Edit Color',
+						description: 'e-color',
+					}
+				], { placeHolder: 'Choose what to edit' });
+
+				if (!options) { return; }
+
+				if (options.description === 'e-ctt') {
+					
+					const updated = await vscode.window.showInputBox({
+						value: existing.content,
+						prompt: 'Edit comment'
+					});
+					
+					if (updated === undefined) { return; }
+					
+					await exct.recover('n', toMarkerPath, {
+						line: currentLine,
+						path: currentPath,
+						color: existing.color,
+						content: updated
+					});
+
+				}
+
+				if (options.description === 'e-color') {
+
+					const updated = await vscode.window.showQuickPick(colorPalette, { placeHolder: 'Select Color' });
+
+					if (!updated) { return; }
+
+					await exct.recover('n', toMarkerPath, {
+						line: currentLine,
+						path: currentPath,
+						color: updated.label!,
+						content: existing.content
+					});
+
+				}
+
 
 			} else if (selected.description === 'add' && !existing) {
 				// --- NEW COMMENT MODE ---
@@ -294,6 +342,9 @@ export function activate(context: vscode.ExtensionContext) {
 					color: colorOption.label!,
 					content: content
 				});
+			} else if (selected.description === 'recover') {
+				await exct.refresh(configLoader.list);
+				vscode.window.showInformationMessage('Comment recovered');
 			}
 		});
 
@@ -326,6 +377,7 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {
+	return exct.refresh(configLoader.list);
 }
 
 const forDebug = (ctx: any, cl: any, cmd: string) => {

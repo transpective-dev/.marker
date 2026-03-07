@@ -68,7 +68,32 @@ export class executor {
         await appendFile(this.toMarker, JSON.stringify(record) + '\n');
     }
 
-    public async recover(path: string, ctt: ctt) {
+    public async refresh(list: any) {
+
+        // refresh marker file
+        if (!list) { return; }
+    
+        const lines: string[] = [];
+        // Traverse the nested dict: list[path][line] = {content, color}
+        for (const [filePath, markersAtLines] of Object.entries(list)) {
+            for (const [lineStr, data] of Object.entries(markersAtLines as any)) {
+                const record = {
+                    line: parseInt(lineStr),
+                    path: filePath,
+                    color: (data as any).color,
+                    content: (data as any).content
+                };
+                lines.push(JSON.stringify(record));
+            }
+        }
+        // Overwrite the entire file with the latest in-memory state
+        await writeFile(this.toMarker, lines.join('\n') + (lines.length > 0 ? '\n' : ''));
+        return;
+    }
+
+    public async recover(cmd: string = 'n', path?: string, ctt?: ctt) {
+
+        if (!path || !ctt) { return; };
 
         // 1. Read every line in the NDJSON file
         const raw = await readFile(this.toMarker, 'utf-8');
