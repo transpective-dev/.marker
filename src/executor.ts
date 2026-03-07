@@ -1,5 +1,4 @@
 import { appendFile, readFile, writeFile } from "fs/promises";
-import { pathToFileURL } from "url";
 
 interface ctt {
     line: number,
@@ -12,14 +11,50 @@ export class executor {
 
     private toMarker: string = '';
 
+    private static mdChangeLs = new Map<string, string>();
+
+    /**
+     * Returns a workspace-relative path (e.g. "src/extension.ts").
+     * Bypasses all URI encoding, drive letter, and virtual FS issues.
+     */
+    public static normalizePath(rawPath: string): string {
+        try {
+            const vscode = require('vscode');
+            const uri = rawPath.startsWith('file://') ? vscode.Uri.parse(rawPath) : vscode.Uri.file(rawPath);
+
+            // Get relative path and normalize slashes
+            let i = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
+
+            const cleaned = i.replace(/^[\.\/]+/, '');
+
+            return './' + cleaned;
+        } catch {
+            return './' + rawPath.replace(/\\/g, '/').replace(/^[\.\/]+/, '');
+        }
+    }
+
+    public static formatEnchance = (content: string) => {
+        let result = content;
+        executor.mdChangeLs.forEach((value, key) => {
+            // Using a simple split/join for better performance on large strings
+            result = result.split(key).join(value);
+        });
+        return result;
+    }
+
     constructor(path: string) {
         this.toMarker = path;
+
+        executor.mdChangeLs.set('\\n', '\n\n');    // User input \n becomes Markdown newline
+        executor.mdChangeLs.set('\\t', '    ');   // Tabs to 4 spaces
+        executor.mdChangeLs.set('---', '  \n\n---\n\n'); // Horizontal rule
+        
     }
 
     public async writeIntoMarker(path: string, ctt: ctt) {
 
-        // Guard against double-encoding: if it's already a URL, use it as-is
-        const normalizedPath = ctt.path.startsWith('file://') ? ctt.path : pathToFileURL(ctt.path).href;
+        // Path is already a properly encoded file:// URI provided by VS Code
+        const normalizedPath = ctt.path;
 
         const record = {
             line: ctt.line,
@@ -45,8 +80,7 @@ export class executor {
                 if (!line.trim()) { return false; } // drop empty lines
                 try {
                     const obj = JSON.parse(line);
-                    const targetPath = ctt.path.startsWith('file://') ? ctt.path : pathToFileURL(ctt.path).href;
-                    return !(obj.path === targetPath && obj.line === ctt.line);
+                    return !(obj.path === ctt.path && obj.line === ctt.line);
                 } catch {
                     return false; // drop corrupted lines
                 }
@@ -56,7 +90,7 @@ export class executor {
         // 3. Build the updated record
         const newRecord = {
             line: ctt.line,
-            path: ctt.path.startsWith('file://') ? ctt.path : pathToFileURL(ctt.path).href,
+            path: ctt.path,
             color: ctt.color,
             content: ctt.content
         };

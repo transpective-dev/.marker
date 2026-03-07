@@ -1,7 +1,5 @@
 import { join } from 'path';
-import { workspacePath } from '../extension';
 import { readdir, readFile } from 'fs/promises';
-import { pathToFileURL } from 'url';
 
 // Plan B: two-level nested map - { filepath: { line: { content, color } } }
 // Lookup is O(1) instead of O(n) array.find()
@@ -16,32 +14,39 @@ interface note_ls {
 
 
 import * as vscode from 'vscode';
+import { executor } from '../executor';
 
 export class configloader {
 
-    
+
     private onUpdateCallback?: () => void;
 
     public setOnUpdate(cb: () => void) { this.onUpdateCallback = cb; }
-    
-    private path = workspacePath;
-    
+
+    private path: string;
+
     public list: note_ls = {};
 
     // register file system watcher
-    public watcher = vscode.workspace.createFileSystemWatcher(
-
-        // scope to .marker
-        new vscode.RelativePattern(this.path, '**/*.jsonl')
-    );
+    public watcher: vscode.FileSystemWatcher;
+    
     // Plan D: debounce timer - only reload after 300ms of silence
     private debounceTimer: NodeJS.Timeout | null = null;
+    
+    constructor(path: string) {
+        
+        this.watcher = vscode.workspace.createFileSystemWatcher(
+    
+            // scope to .marker
+            new vscode.RelativePattern(path, '**/*.jsonl')
+            
+        );
 
-    constructor() {
+        this.path = path;
         // initialize
         this.loadConfig();
         console.log(this.path);
-
+        
         // Add FileSystemWatcher for hot-reloading (with debounce)
         const reload = () => {
             if (this.debounceTimer) { clearTimeout(this.debounceTimer); }
@@ -83,7 +88,7 @@ export class configloader {
 
             for (const item of i) {
 
-                const refinePath = item.path;
+                const refinePath = executor.normalizePath(item.path);
 
                 // Plan B: store as nested key map instead of array
                 if (!this.list[refinePath]) {
@@ -97,28 +102,20 @@ export class configloader {
             }
 
             console.dir(this.list, { depth: null, colors: true });
-            
+
+            // updateDecos
             this.onUpdateCallback?.();
-            
+
         } catch (error) {
             console.error('Marker MVP try-catch caught an error during loadConfig:', error);
         }
 
     }
 
-    private urlMap = new Map<string, string>();
-
     // get content from jsonl
     public get(path: string, line: number) {
 
-        if (this.urlMap.has(path)) {
-            path = this.urlMap.get(path)!;
-        } else {
-            this.urlMap.set(path, pathToFileURL(path).href);
-            path = this.urlMap.get(path)!;
-        }
-
-        console.log(path);
+        path = executor.normalizePath(path);
 
         // Find if line exists in the file's marker list
         if (!this.list[path]) {
