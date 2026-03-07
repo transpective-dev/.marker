@@ -44,7 +44,7 @@ class MarkerHoverProvider implements vscode.HoverProvider {
 import { join } from 'path';
 import { mkdir, writeFile, readdir } from 'fs/promises';
 import { configloader } from './loader/configLoader';
-import { executor } from './executor';
+import { executor, lineTracker } from './executor';
 
 const initializeFile = async () => {
 
@@ -211,6 +211,14 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Sync: when user switches file tab, re-draw for new file
 	vscode.window.onDidChangeActiveTextEditor(() => { updateDecos(); }, null, context.subscriptions);
+
+	// Sync: when user edits code, shift marker line numbers to follow
+	vscode.workspace.onDidChangeTextDocument((event) => {
+		const filePath = executor.normalizePath(event.document.uri.fsPath);
+		lineTracker.shift(configLoader.list, filePath, event.contentChanges);
+		updateDecos();
+		lensEmitter.fire();
+	}, null, context.subscriptions);
 
 	decoration();
 

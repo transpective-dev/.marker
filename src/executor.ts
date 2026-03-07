@@ -48,7 +48,7 @@ export class executor {
         executor.mdChangeLs.set('\\n', '\n\n');    // User input \n becomes Markdown newline
         executor.mdChangeLs.set('\\t', '    ');   // Tabs to 4 spaces
         executor.mdChangeLs.set('---', '  \n\n---\n\n'); // Horizontal rule
-        
+
     }
 
     public async writeIntoMarker(path: string, ctt: ctt) {
@@ -99,4 +99,47 @@ export class executor {
         await writeFile(this.toMarker, filtered + '\n' + JSON.stringify(newRecord) + '\n');
     }
 
+}
+
+/**
+ * Tracks line shifts caused by user edits and updates marker positions in memory.
+ * Usage: instantiate once in activate(), pass configLoader.list reference.
+ */
+export class lineTracker {
+
+    /**
+     * Call this from onDidChangeTextDocument.
+     * It shifts all marker line numbers for the affected file.
+     */
+    public static shift(
+        list: { [filepath: string]: { [line: number]: { content: string; color: string } } },
+        filePath: string,
+        changes: readonly { range: { start: { line: number }; end: { line: number } }; text: string }[]
+    ) {
+        const fileMarkers = list[filePath];
+        if (!fileMarkers) { return; }
+
+        for (const change of changes) {
+            const startLine = change.range.start.line;
+            const oldLineCount = change.range.end.line - change.range.start.line;
+            const newLineCount = change.text.split('\n').length - 1;
+            const delta = newLineCount - oldLineCount;
+
+            if (delta === 0) { continue; }
+
+            // Rebuild the object with shifted keys
+            const updated: typeof fileMarkers = {};
+            for (const lineStr in fileMarkers) {
+                const line = parseInt(lineStr);
+                if (line > startLine + 1) {
+                    // This marker is below the edit → shift it
+                    updated[line + delta] = fileMarkers[lineStr];
+                } else {
+                    // This marker is at or above the edit → keep it
+                    updated[line] = fileMarkers[lineStr];
+                }
+            }
+            list[filePath] = updated;
+        }
+    }
 }
