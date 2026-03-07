@@ -67,7 +67,7 @@
 
 ### 界面操作
 
-![Marker 界面演示](image.png)
+![](./readme/image.png)
 
 > 👁️ 下载插件后，编辑器右侧会出现一个 **Eye Icon**
 
