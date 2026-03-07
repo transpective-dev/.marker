@@ -7,6 +7,8 @@
   "engines": {
     "vscode": "^1.100.0"
   },
+  "icon": "./icon.png",
+  "repository": "https://github.com/transpective-dev/.marker",
   "license": "MIT",
   "categories": [
     "Other"
