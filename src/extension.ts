@@ -42,34 +42,43 @@ class MarkerHoverProvider implements vscode.HoverProvider {
 }
 
 import { join } from 'path';
-import { mkdir, writeFile, readdir } from 'fs/promises';
+import { mkdir, writeFile, readdir, readFile } from 'fs/promises';
 import { configloader } from './loader/configLoader';
 import { executor, lineTracker } from './executor';
 
-const initializeFile = async () => {
+let workspacePath: string;
+export let toMarkerPath: string;
+export let exct: executor;
 
-	const content = {
-		path: toMarkerPath,
-		line: 1,
-		content: 'welcome to .marker!'
-	};
+const initializeFile = async (storagePath: string, jsonlPath: string) => {
+	try {
+		// Check if storage directory exists
+		try {
+			await readdir(storagePath);
+			// If it exists, check if the file exists
+			try {
+				await readFile(jsonlPath);
+				return; // File exists, we are good
+			} catch {
+				// File doesn't exist, create it below
+			}
+		} catch {
+			// Directory doesn't exist, create it
+			await mkdir(storagePath, { recursive: true });
+		}
 
-	const ls = await readdir(workspacePath);
+		const content = {
+			line: 1,
+			path: executor.normalizePath(jsonlPath),
+			color: 'green',
+			content: 'welcome to .marker!'
+		};
 
-	if (ls) {
-		return;
-	};
-
-	mkdir(workspacePath, { recursive: true });
-	writeFile(toMarkerPath, JSON.stringify(content, null, 2));
-
+		await writeFile(jsonlPath, JSON.stringify(content) + '\n');
+	} catch (e) {
+		console.error('Failed to initialize .marker storage:', e);
+	}
 };
-
-// point to the root of the workspace
-const workspacePath = join(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath!, '.marker-storage');
-export const toMarkerPath = join(workspacePath, '.marker.jsonl');
-
-const exct = new executor(toMarkerPath);
 
 // --- Color Palette ---
 
@@ -204,7 +213,20 @@ const lenses: vscode.CodeLensProvider = {
 
 export function activate(context: vscode.ExtensionContext) {
 
+	// 1. Safe Initialization of Workspace Paths
+	const folders = vscode.workspace.workspaceFolders;
+	if (!folders || folders.length === 0) {
+		console.log('.Marker: No workspace folders found. Extension will stay dormant.');
+		return;
+	}
+
+	const rootPath = folders[0].uri.fsPath;
+	workspacePath = join(rootPath, '.marker-storage');
+	toMarkerPath = join(workspacePath, '.marker.jsonl');
+
+	// 2. Initialize Core Logic
 	configLoader = new configloader(workspacePath);
+	exct = new executor(toMarkerPath);
 
 	// Sync: when marker data changes, re-draw highlights
 	configLoader.setOnUpdate(() => { updateDecos(); });
@@ -225,7 +247,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	decoration();
 
-	initializeFile();
+	initializeFile(workspacePath, toMarkerPath);
 
 	console.log('Marker Loaded!');
 
@@ -308,9 +330,9 @@ export function activate(context: vscode.ExtensionContext) {
 						value: existing.content,
 						prompt: 'Edit comment'
 					});
-					
+
 					if (updated === undefined) { return; }
-					
+
 					await exct.recover('n', toMarkerPath, {
 						line: currentLine,
 						path: currentPath,

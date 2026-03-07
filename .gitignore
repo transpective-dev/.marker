@@ -9,3 +9,4 @@ memos
 .vscodeignore
 .vscode-test.mjs
 .vscode
+extension
