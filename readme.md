@@ -1,153 +1,157 @@
-# 👋 欢迎来到 Marker！
+# 👋 Welcome to .Marker！
 
-> 📌 **Marker** - 为程序员设计的轻量级非侵入式注释工具
-
----
-
-## 📖 目录
-
-1. [利用价值](#-利用价值)
-2. [基本利用方法](#-基本利用方法)
-3. [支持和注意](#-支持和注意)
+> 📌 **Marker** - A Sticky note for Programmers!
 
 ---
 
-## 🎯 利用价值
+1. [Why it is worth to use?]()
+2. [How to use?]()
+3. [supports and notes]()
 
-### 核心价值
+---
 
-- 🎨 **颜色分类** - 可以通过 Highlight 快速区分注释类型
-  - 🔴 红色 = 危险代码
-  - 🟡 黄色 = 需要修改的代码
-  - 🟢 绿色 = 安全代码
-  - ...自定义颜色
+## Why it is worth to use ?
 
-- 📄 **跨语言支持** - 在 JSON 等不支持注释的语言中，依然可以通过 Highlight 显示注释
+### core values
 
-- 🔍 **Lens 注释** - 允许在不污染代码的前提下，通过悬浮或打开 Highlight 查看注释
-  - 适合需要保持代码简洁的项目
+- **group by color** - could differentiate comment type by highlights directly
+  - 🔴 red = denger or there's a bugs
+  - 🟡 yellow = need to fix
+  - 🟢 green = good code. dont touch
+  - ...etc
 
-### 为什么需要 Marker？
+- 📄 **cross-language support** - It makes you able to write comment at everywhere. even the json! (with same format!)
 
-| 原生注释 | Marker 注释 |
+- 🔍 **Lens comment** - allows you to read comment by hover over on code or highlight mode without clutter project ! 
+
+### Why Marker？
+
+| original comment | Marker |
 | :--- | :--- |
-| ✅ 快速查看和编写 | ✅ 快速查看和编写 |
-| ❌ 污染源代码 | ✅ 不污染源代码 |
-| ❌ 受语言限制 | ✅ 跨语言通用 |
-| ❌ 项目风格不统一 | ✅ 统一注释标准 |
-
-> 💡 **不同项目有不同的注释规范，不同语言有不同的 Policy。**
-> **Marker 就是为了保持简洁和适配不同语言而诞生的轻量级注释工具。**
+| ✅ quick check and edit | ✅ bit of complex but still fine! |
+| ❌ pollute project | ✅ check comment with pollution! |
+| ❌ not all language support comment | ✅ but we can! |
+| ❌ inconsistent format | ✅ one format, use in everywhere! |
+| ❌ disparated comments | ✅ manage them in one place! |
 
 ---
 
-## 🚀 基本利用方法
+## how to use ?
 
-### 功能表
+### function list 
 
-| 功能 | 说明 | 显示条件 |
+| function | explain | show condition |
 | :--- | :--- | :--- |
-| **Add** | 添加注释 | 未初始化时显示 |
-| **Edit** | 编辑注释 | 已初始化时显示 |
-| **Delete** | 删除注释 | 已初始化时显示 |
-| **Refresh** | 刷新注释列表 | 始终显示 |
+| **Add** | add new comment | if line hasnt comment |
+| **Edit** | edit comment | if line has comment |
+| **Delete** | delete | if line has comment  |
+| **Refresh** | refresh changes | always |
 
-> ⚠️ **Add** 和 **Edit** 不会同时出现
+> ⚠️ **Add** and **Edit** are never shows at same time.
 
 ---
 
-### 常用操作
+### open menu
 
-| 操作方式 | 快捷键/方法 |
+| howto | shortcut/method |
 | :--- | :--- |
-| **打开菜单** | `Ctrl + Alt + .` |
-| **右键菜单** | 右键点击代码行 |
+| **open input box by shortcut** | `Ctrl + Alt + .` |
+| **open box from rightclick menu** | rightclick at line where you want to add/edit |
 
 ---
 
-### 界面操作
+### highlight
 
-![](./readme/image.png)
+![](image.png)
 
-> 👁️ 下载插件后，编辑器右侧会出现一个 **Eye Icon**
+> a **Eye Icon** will be shown after download extension like pic on above
 
-#### 点击 Eye Icon 可以
+#### click eye to 
 
-1. ✅ **Toggle Highlight On/Off** - 开关高亮显示
-2. 🎨 **查看注释显化** - 不需要通过 Hover 即可查看
-3. 🌈 **显示对应行的颜色** - 根据注释类型显示不同颜色
+1. ✅ **Toggle Highlight On/Off** - toggle of/off highlight mode
+2. 🎨 **comment visualization** - check comments withoud hover over the lines!
+3. 🌈 **markup lines with matched color** - markup lines with color you selected!
 
 ---
 
-## ⚙️ 支持和注意
+## support and notes
 
 ### 支持环境
 
 | 项目 | 要求 |
 | :--- | :--- |
 | **VS Code** | `1.100.0+` |
+| **can use md format for comment?** | `yes!` |
 
 ---
 
-### 注意事项
+### about bugs and things you should know
 
-#### 🔄 关于 Refresh
+#### about Refresh
 
-> ⚠️ **机制问题：Refresh 不会自动更新 Marker**
+> you must have to refresh with your own hand.
+> we'd considered to use onDidSaveTextDocument for the refresh,
+> but, that'll be too denger if user using auto-save.
+> so, we decided to use manual refresh for write changedList to .marker.jsonl!
 
-| 场景 | 行为 |
-| :--- | :--- |
-| 正常保存 | 关闭 VS Code 时自动保存 |
-| 需要立即生效 | 调用 **Refresh** 功能 |
-| 内容过多 | 处理可能需要时间，可能保存失败 |
+the refresh will be call by
 
-> 💡 **建议：** 如果内容较多，请在关闭前手动执行 Refresh
+'onDidCloseTextDocument': when you close your file that has been changed.
+'deactivate': when extension turns off.
+'manual refresh': refresh from function bar
 
----
-
-#### ↩️ 关于换行
-
-> ⚠️ **注释的换行跟踪仅在以下情况生效：**
-
-- ✅ 从上一行换行
-- ✅ 使用 `Ctrl + Shift + Enter`
-
-> ❌ **从代码开头换行，注释则无法跟踪**
+also, write change into file takes time.
+please refresh manually if there is too many comment in file.
 
 ---
 
-### 🐛 潜在 Bug
+#### how many .marker.jsonl?
 
-> 可能存在潜在的 Bug，欢迎大家 **Feedback**！
-> 
-> 我会尽量去修复。
+current version only support one file as you can see from the code.
+
+but we are planning to increase detectable file count at somewhere version.
 
 ---
 
-## 🤝 最后
+#### about changing lines
 
-感谢大家阅读到这里！❤️
+> ⚠️ ** we only able to track the line changes by the ways in below**
 
-以上是 Marker 的基本功能介绍。
+- ✅ change from last of previous line
+- ✅ use `Ctrl + Shift + Enter`
 
-###  项目理念
+> ❌ **we currently cannot tracking the line changing by changing line from codehead **
 
->  **注释本质上属于非常贴近大家生活的东西。**
+---
+
+### 🐛 about bugs
+
+> feedback about bugs and improvements are very welcome！
+> tell me anytime!
+
+---
+
+## 🤝 in the end
+
+thanks for reading this far！❤️
+
+and those are full introduction about '.marker'。
+
+###  concept
+
+>  **comment, is most closely thing to the every programmers.**
 > 
-> 👤 因此我一个人可能无法管理得过来。
+> i hope everyone can use good thing from bottom of my heart as a member of the programmer community 
 > 
-> 🙏 **如果大家觉得不错的话，希望大家多给我 Feedback 或者 PR 来辅助我修改。**
+> so, i really hope you guys feel free to send me feedback for our project, and everyones coding life.
 > 
-> 🌍 **这个项目不属于我一个人，而是属于每一个爱戴、利用这个插件的大家，属于整个编程社区。**
-> 
-> 🚀 **我希望能与大家共同建设能被大家喜欢的项目！**
-
+> this project is not just belongs to me, but belongs to everyone who wants to use a good stuff.
+>
+> thanks for reading again
 ---
 
 <div align="center">
 
-**Made with ❤️ by the Marker Community**
-
-[📦 安装扩展](#) | [🐛 报告问题](#) | [💡 提出建议](#)
+**Made with ❤️ by the Marker Community and transpective dev team**
 
 </div>
