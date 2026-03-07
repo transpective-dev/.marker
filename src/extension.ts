@@ -263,10 +263,19 @@ export function activate(context: vscode.ExtensionContext) {
 		}];
 
 		// push recover
-		items.push({
-			label: 'Refresh Comment Change',
-			description: 'recover',
-		});
+
+		const lsItems = [
+			{
+				label: 'Refresh Comment Change',
+				description: 'recover',
+			},
+			{
+				label: 'Delete Comment',
+				description: 'delete',
+			}
+		];
+
+		items.push(...lsItems);
 
 		qp.items = items;
 
@@ -294,7 +303,7 @@ export function activate(context: vscode.ExtensionContext) {
 				if (!options) { return; }
 
 				if (options.description === 'e-ctt') {
-					
+
 					const updated = await vscode.window.showInputBox({
 						value: existing.content,
 						prompt: 'Edit comment'
@@ -344,7 +353,10 @@ export function activate(context: vscode.ExtensionContext) {
 				});
 			} else if (selected.description === 'recover') {
 				await exct.refresh(configLoader.list);
-				vscode.window.showInformationMessage('Comment recovered');
+				vscode.window.showInformationMessage('Refreshed');
+			} else if (selected.description === 'delete') {
+				delete configLoader.list[currentPath][currentLine];
+				await exct.refresh(configLoader.list);
 			}
 		});
 
