@@ -21,7 +21,7 @@ class MarkerHoverProvider implements vscode.HoverProvider {
 
 	): vscode.ProviderResult<vscode.Hover> {
 
-		const markerText = this.config.get(executor.normalizePath(document.uri.fsPath), position.line + 1);
+		const markerText = this.config.get(executor.normalizePath(document.uri.fsPath), { start: position.line + 1 });
 
 		console.log(markerText);
 
@@ -154,18 +154,34 @@ function updateDecos() {
 	const getList = configLoader.list[currentPath];
 
 	const colorGroups = new Map<string, vscode.Range[]>();
+	const seenRanges = new Set<string>();
 
 	for (const lineStr in getList) {
-		const line = parseInt(lineStr) - 1; // index - 1
-		const color = getList[lineStr].color;
+		const marker = getList[lineStr];
+		const color = marker.color;
+
+		// Deduplicate: each unique multi-line block should only be pushed ONCE
+		// Otherwise, VS Code will layer them, making the background look too thick.
+		const uniqueKey = `${marker.range.start}-${marker.range.end}-${color}-${marker.content}`;
+		if (seenRanges.has(uniqueKey)) { continue; }
+		seenRanges.add(uniqueKey);
+
 		if (!colorGroups.has(color)) {
 			colorGroups.set(color, []);
 		};
 
-		// create a range object, representing the visual range
-		// range(begin, end)
-		colorGroups.get(color)!.push(new vscode.Range(line, 0, line, 0));
+		// VS Code Range is 0-indexed.
+		// Since isWholeLine: true is set in the decoration type, 
+		// any character index (0 to 0) will cover the entire line.
+		colorGroups.get(color)!.push(new vscode.Range(
+			marker.range.start - 1, 0,
+			marker.range.end - 1, 0
+		));
 	}
+
+	// map order: [value, key, map]
+	// style: the form that we defined.
+	// color: the hex.
 	decorationTypes.forEach((style, color) => {
 		const ranges = colorGroups.get(color) || [];
 		currentEditor!.setDecorations(style, ranges);
@@ -289,7 +305,11 @@ export function activate(context: vscode.ExtensionContext) {
 
 		// Ensure absolute path stability exactly like configLoader
 		const currentPath = executor.normalizePath(editor.document.uri.toString());
-		const currentLine = editor.selection.active.line + 1;
+
+		const currentLine = {
+			start: editor.selection.start.line + 1,
+			end: editor.selection.end.line + 1
+		};
 
 		// Check if there is already a comment on the current line (for 'Edit' option)
 		const existing = configLoader.get(currentPath, currentLine);
@@ -391,7 +411,7 @@ export function activate(context: vscode.ExtensionContext) {
 				if (!colorOption) { return; }
 				if (content === undefined) { return; }
 				await exct.writeIntoMarker(toMarkerPath, {
-					range: { start: currentLine, end: currentLine },
+					range: { start: currentLine.start, end: currentLine.end },
 					path: currentPath,
 					color: colorOption.label!,
 					content: content
@@ -400,7 +420,7 @@ export function activate(context: vscode.ExtensionContext) {
 				await exct.refresh(configLoader.list);
 				vscode.window.showInformationMessage('Refreshed');
 			} else if (selected.description === 'delete') {
-				const markerToDelete = configLoader.list[currentPath][currentLine];
+				const markerToDelete = configLoader.list[currentPath][currentLine.start];
 
 				// use for to delete multi-line highlight
 				if (markerToDelete) {

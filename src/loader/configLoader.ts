@@ -130,7 +130,7 @@ export class configloader {
     }
 
     // get content from jsonl
-    public get(path: string, line: number) {
+    public get(path: string, line: { start: number, end?: number }) {
 
         path = executor.normalizePath(path);
 
@@ -140,10 +140,18 @@ export class configloader {
             return undefined;
         }
 
-        // Plan B: O(1) direct key lookup - no array.find() needed
-        const entry = this.list[path]?.[line];
-        console.log(entry);
-        return entry ? entry : undefined;
+        // Check if any line in the range has an existing marker
+        const endLine = line.end ?? line.start;
+        for (let l = line.start; l <= endLine; l++) {
+            const entry = this.list[path][l];
+            if (entry) {
+                console.log('Found overlapping entry at line', l, ':', entry);
+                return entry;
+            }
+        }
+
+        console.log('no entry found in range');
+        return undefined;
     }
 
     public getTotalCount(): number {

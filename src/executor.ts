@@ -164,18 +164,28 @@ export class lineTracker {
         changes: readonly { range: { start: { line: number }; end: { line: number } }; text: string }[]
     ) {
         const fileMarkers = list[filePath];
+
         if (!fileMarkers) { return; }
 
         for (const change of changes) {
+
+            // new line start 
             const startLine = change.range.start.line;
+
+            // get old linecount by subtract start from end
             const oldLineCount = change.range.end.line - change.range.start.line;
+
+            // get new linecount 
             const newLineCount = change.text.split('\n').length - 1;
+
+            // calc shift
             const delta = newLineCount - oldLineCount;
 
             if (delta === 0) { continue; }
 
             // Rebuild the object with shifted keys
             const updated: any = {};
+
             const shiftedRanges = new Set<string>();
 
             for (const lineStr in fileMarkers) {
@@ -185,19 +195,25 @@ export class lineTracker {
                 // Check if we need to shift the range bounds (do this exactly once per unique marker)
                 const uniqueKey = `${marker.range.start}-${marker.range.end}-${marker.content}`;
                 if (!shiftedRanges.has(uniqueKey)) {
+
                     shiftedRanges.add(uniqueKey);
 
-                    // Simple shift logic for start and end
-                    if (marker.range.start > startLine + 1) {
+                    // how to make shift?
+                    // if we changed line at above of range.start, then we shift down.
+                    // otherwise, we shift up or stay if start hasnt change
+                    if (marker.range.start >= startLine + 1) {
                         marker.range.start += delta;
                     }
-                    if (marker.range.end > startLine + 1) {
+
+                    // same as start but end version.
+                    if (marker.range.end >= startLine + 1) {
                         marker.range.end += delta;
                     }
+
                 }
 
                 // replace if position has change.
-                if (line > startLine + 1) {
+                if (line >= startLine + 1) {
                     updated[line + delta] = marker;
                 } else {
                     updated[line] = marker;
