@@ -46,6 +46,7 @@ import { join } from 'path';
 import { mkdir, writeFile, readdir, readFile } from 'fs/promises';
 import { configloader } from './loader/configLoader';
 import { executor, lineTracker } from './executor';
+import { findEnclosingBlock } from './engine/bracketMatcher';
 
 let workspacePath: string;
 export let toMarkerPath: string;
@@ -443,6 +444,47 @@ export function activate(context: vscode.ExtensionContext) {
 		lensEmitter.fire();
 	});
 
+	// --- marker.expandRange ---
+	// Detects the enclosing code block bracket pair from the cursor position,
+	// then stretches the current marker's range to cover the entire block.
+	const expandRange = vscode.commands.registerCommand('marker.expandRange', async () => {
+
+		const editor = vscode.window.activeTextEditor;
+		if (!editor) { return; }
+
+		const currentPath = executor.normalizePath(editor.document.uri.toString());
+		const cursorLine = editor.selection.active.line; // 0-based
+
+		// Find existing marker at cursor position
+		const existing = configLoader.list[currentPath]?.[cursorLine + 1];
+		if (!existing) {
+			vscode.window.showWarningMessage('.Marker: No marker found at cursor line to expand.');
+			return;
+		}
+
+		// Run the bracket matching engine (returns 1-based line numbers)
+		const block = findEnclosingBlock(editor.document, cursorLine);
+		if (!block) {
+			vscode.window.showWarningMessage('.Marker: Could not find enclosing block from cursor position.');
+			return;
+		}
+
+		// Remove old range from memory
+		for (let l = existing.range.start; l <= existing.range.end; l++) {
+			delete configLoader.list[currentPath][l];
+		}
+
+		// Write the new expanded range to disk
+		await exct.recover('n', toMarkerPath, {
+			range: { start: block.start, end: block.end },
+			path: currentPath,
+			color: existing.color,
+			content: existing.content
+		});
+
+		vscode.window.showInformationMessage(`.Marker: Range expanded to lines ${block.start}–${block.end}`);
+	});
+
 	forDebug(context, configLoader, 'marker.debug');
 
 	const register = [
@@ -450,7 +492,8 @@ export function activate(context: vscode.ExtensionContext) {
 		lensRegistration,
 		configLoader.watcher,
 		addComment,
-		highLight
+		highLight,
+		expandRange
 	];
 
 	context.subscriptions.push(...register);

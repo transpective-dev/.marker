@@ -27,6 +27,10 @@
         "command": "marker.highLight",
         "title": "Toggle Marker Highlighting",
         "icon": "$(eye)"
+      },
+      {
+        "command": "marker.expandRange",
+        "title": ".Marker: Expand Range to Enclosing Block"
       }
     ],
     "menus": {
@@ -50,6 +54,12 @@
         "command": "marker.addComment",
         "key": "ctrl+alt+.",
         "mac": "cmd+alt+.",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "marker.expandRange",
+        "key": "ctrl+alt+e",
+        "mac": "cmd+alt+e",
         "when": "editorTextFocus"
       }
     ]
