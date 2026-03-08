@@ -74,11 +74,9 @@
 
 ---
 
-## support and notes
+### support and notes
 
-### 支持环境
-
-| 项目 | 要求 |
+| env and features | requires |
 | :--- | :--- |
 | **VS Code** | `1.100.0+` |
 | **can use md format for comment?** | `yes!` |

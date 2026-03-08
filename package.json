@@ -1,6 +1,6 @@
 {
-  "name": "marker",
-  "displayName": "Marker",
+  "name": "transpective-marker",
+  "displayName": ".Marker",
   "description": "A sticky note for programmers",
   "version": "1.0.0",
   "publisher": "Transpective-Dev-Team",

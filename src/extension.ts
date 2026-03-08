@@ -28,9 +28,10 @@ class MarkerHoverProvider implements vscode.HoverProvider {
 		if (markerText) {
 
 			const md = new vscode.MarkdownString();
-
+			// Important: set baseUri so relative paths (./img.png) work inside Hover
+			md.baseUri = document.uri;
 			md.isTrusted = true;
-
+			md.supportHtml = true; // Enable HTML tags like <b>, <i>, <br>, etc.
 			md.appendMarkdown(`${executor.formatEnchance(markerText.content)}`);
 
 			return new vscode.Hover(md);
@@ -127,7 +128,7 @@ const decoration = () => {
 			}
 		}));
 	}
-}
+};
 
 function updateDecos() {
 
@@ -194,15 +195,37 @@ const lenses: vscode.CodeLensProvider = {
 		const fileMarkers = configLoader.list[executor.normalizePath(doc.uri.fsPath)];
 
 		// register lenses
+		const seen = new Set<string>();
 		for (const lineStr in fileMarkers) {
-			const line = parseInt(lineStr) - 1;
-			const range = new vscode.Range(line, 0, line, 0);
+
+			// get data from filemarker
+			const markerInfo = fileMarkers[lineStr];
+
+			// get place for comment by reducing one from start
+			const startLine = markerInfo.range.start - 1;
+
+			// If we've already rendered a lens for this marker, skip
+			// to avoid show comment on every line in range.
+			// conbine each line in range to one .
+			const uniqueKey = `${startLine}-${markerInfo.range.end}-${markerInfo.content}`;
+
+			// if already shown comment, then skip.
+			if (seen.has(uniqueKey)) { continue; }
+
+			// initialize uniqueId
+			seen.add(uniqueKey);
+
+			// where to show comment
+			const range = new vscode.Range(startLine, 0, startLine, 0);
+
+			// set position for lens
 			const lens = new vscode.CodeLens(range);
 
 			lens.command = {
-				title: `[ .Marker ]: ${fileMarkers[lineStr].content}`,
+				title: `[ .Marker ]: ${markerInfo.content}`,
 				command: "marker.addComment", // let the user click to edit
-				arguments: []
+				arguments: [],
+				tooltip: executor.formatEnchance(markerInfo.content)
 			};
 			lenses.push(lens);
 		}
@@ -334,7 +357,7 @@ export function activate(context: vscode.ExtensionContext) {
 					if (updated === undefined) { return; }
 
 					await exct.recover('n', toMarkerPath, {
-						line: currentLine,
+						range: existing.range,
 						path: currentPath,
 						color: existing.color,
 						content: updated
@@ -349,7 +372,7 @@ export function activate(context: vscode.ExtensionContext) {
 					if (!updated) { return; }
 
 					await exct.recover('n', toMarkerPath, {
-						line: currentLine,
+						range: existing.range,
 						path: currentPath,
 						color: updated.label!,
 						content: existing.content
@@ -368,7 +391,7 @@ export function activate(context: vscode.ExtensionContext) {
 				if (!colorOption) { return; }
 				if (content === undefined) { return; }
 				await exct.writeIntoMarker(toMarkerPath, {
-					line: currentLine,
+					range: { start: currentLine, end: currentLine },
 					path: currentPath,
 					color: colorOption.label!,
 					content: content
@@ -377,8 +400,15 @@ export function activate(context: vscode.ExtensionContext) {
 				await exct.refresh(configLoader.list);
 				vscode.window.showInformationMessage('Refreshed');
 			} else if (selected.description === 'delete') {
-				delete configLoader.list[currentPath][currentLine];
-				await exct.refresh(configLoader.list);
+				const markerToDelete = configLoader.list[currentPath][currentLine];
+
+				// use for to delete multi-line highlight
+				if (markerToDelete) {
+					for (let l = markerToDelete.range.start; l <= markerToDelete.range.end; l++) {
+						delete configLoader.list[currentPath][l];
+					}
+					await exct.refresh(configLoader.list);
+				}
 			}
 		});
 

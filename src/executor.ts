@@ -1,10 +1,15 @@
 import { appendFile, readFile, writeFile } from "fs/promises";
 
-interface ctt {
-    line: number,
-    path: string,
-    color: string,
-    content: string,
+export interface MarkerRange {
+    start: number;
+    end: number;
+}
+
+export interface MarkerAnnotation {
+    range: MarkerRange;
+    path: string;
+    color: string;
+    content: string;
 }
 
 export class executor {
@@ -51,13 +56,13 @@ export class executor {
 
     }
 
-    public async writeIntoMarker(path: string, ctt: ctt) {
+    public async writeIntoMarker(path: string, ctt: MarkerAnnotation) {
 
         // Path is already a properly encoded file:// URI provided by VS Code
         const normalizedPath = ctt.path;
 
         const record = {
-            line: ctt.line,
+            range: { start: ctt.range.start, end: ctt.range.end },
             path: normalizedPath,
             color: ctt.color,
             content: ctt.content
@@ -72,18 +77,29 @@ export class executor {
 
         // refresh marker file
         if (!list) { return; }
-    
+
         const lines: string[] = [];
-        // Traverse the nested dict: list[path][line] = {content, color}
+        const seen = new Set<string>();
+
+        // Traverse the nested dict: list[path][line] = MarkerData
         for (const [filePath, markersAtLines] of Object.entries(list)) {
             for (const [lineStr, data] of Object.entries(markersAtLines as any)) {
-                const record = {
-                    line: parseInt(lineStr),
-                    path: filePath,
-                    color: (data as any).color,
-                    content: (data as any).content
-                };
-                lines.push(JSON.stringify(record));
+
+                const d = data as any;
+                const uniqueKey = `${filePath}:${d.range.start}-${d.range.end}-${d.color}-${d.content}`;
+
+                // Deduplicate mapping (since 1 MarkerData can map to N lines)
+                if (!seen.has(uniqueKey)) {
+                    seen.add(uniqueKey);
+
+                    const record = {
+                        range: { start: d.range.start, end: d.range.end },
+                        path: filePath,
+                        color: d.color,
+                        content: d.content
+                    };
+                    lines.push(JSON.stringify(record));
+                }
             }
         }
         // Overwrite the entire file with the latest in-memory state
@@ -91,30 +107,36 @@ export class executor {
         return;
     }
 
-    public async recover(cmd: string = 'n', path?: string, ctt?: ctt) {
+    public async recover(cmd: string = 'n', path?: string, ctt?: MarkerAnnotation) {
 
         if (!path || !ctt) { return; };
 
         // 1. Read every line in the NDJSON file
         const raw = await readFile(this.toMarker, 'utf-8');
 
-        // 2. Keep only lines that do NOT match the same path+line (drop the old entry)
+        // 2. Keep only lines that do NOT match the same path+range start (drop the old entry)
         const filtered = raw
             .split('\n')
             .filter(line => {
                 if (!line.trim()) { return false; } // drop empty lines
                 try {
                     const obj = JSON.parse(line);
-                    return !(obj.path === ctt.path && obj.line === ctt.line);
+                    const rStart = obj.range ? obj.range.start : obj.line;
+                    return !(obj.path === ctt.path && rStart === ctt.range.start);
                 } catch {
                     return false; // drop corrupted lines
                 }
             })
             .join('\n');
 
+        if (cmd === 'd') {
+            await writeFile(this.toMarker, filtered + (filtered.length > 0 ? '\n' : ''));
+            return;
+        }
+
         // 3. Build the updated record
         const newRecord = {
-            line: ctt.line,
+            range: { start: ctt.range.start, end: ctt.range.end },
             path: ctt.path,
             color: ctt.color,
             content: ctt.content
@@ -153,15 +175,32 @@ export class lineTracker {
             if (delta === 0) { continue; }
 
             // Rebuild the object with shifted keys
-            const updated: typeof fileMarkers = {};
+            const updated: any = {};
+            const shiftedRanges = new Set<string>();
+
             for (const lineStr in fileMarkers) {
                 const line = parseInt(lineStr);
+                const marker: any = fileMarkers[lineStr];
+
+                // Check if we need to shift the range bounds (do this exactly once per unique marker)
+                const uniqueKey = `${marker.range.start}-${marker.range.end}-${marker.content}`;
+                if (!shiftedRanges.has(uniqueKey)) {
+                    shiftedRanges.add(uniqueKey);
+
+                    // Simple shift logic for start and end
+                    if (marker.range.start > startLine + 1) {
+                        marker.range.start += delta;
+                    }
+                    if (marker.range.end > startLine + 1) {
+                        marker.range.end += delta;
+                    }
+                }
+
+                // replace if position has change.
                 if (line > startLine + 1) {
-                    // This marker is below the edit → shift it
-                    updated[line + delta] = fileMarkers[lineStr];
+                    updated[line + delta] = marker;
                 } else {
-                    // This marker is at or above the edit → keep it
-                    updated[line] = fileMarkers[lineStr];
+                    updated[line] = marker;
                 }
             }
             list[filePath] = updated;
