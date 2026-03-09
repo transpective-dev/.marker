@@ -2,6 +2,8 @@
 
 > 📌 **Marker** - A sticky note system for programmers. Write comments anywhere without cluttering your code!
 
+![](https://github.com/transpective-dev/.marker/blob/main/readme/preview.png)
+
 ---
 
 ## 🚀 Why Use .Marker?
