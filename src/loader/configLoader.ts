@@ -1,14 +1,20 @@
 import { join } from 'path';
 import { readdir, readFile } from 'fs/promises';
 
-// Plan B: two-level nested map - { filepath: { line: { content, color } } }
 // Lookup is O(1) instead of O(n) array.find()
-interface note_ls {
+export interface MarkerRange {
+    start: number;
+    end: number;
+}
+export interface MarkerData {
+    range: MarkerRange;
+    content: string;
+    color: string;
+}
+
+export type note_ls = {
     [filepath: string]: {
-        [line: number]: {
-            content: string;
-            color: string;
-        };
+        [line: number]: MarkerData;
     };
 }
 
@@ -29,24 +35,24 @@ export class configloader {
 
     // register file system watcher
     public watcher: vscode.FileSystemWatcher;
-    
+
     // Plan D: debounce timer - only reload after 300ms of silence
     private debounceTimer: NodeJS.Timeout | null = null;
-    
+
     constructor(path: string) {
-        
+
         this.watcher = vscode.workspace.createFileSystemWatcher(
-    
+
             // scope to .marker
             new vscode.RelativePattern(path, '**/*.jsonl')
-            
+
         );
 
         this.path = path;
         // initialize
         this.loadConfig();
         console.log(this.path);
-        
+
         // Add FileSystemWatcher for hot-reloading (with debounce)
         const reload = () => {
             if (this.debounceTimer) { clearTimeout(this.debounceTimer); }
@@ -95,10 +101,21 @@ export class configloader {
                     this.list[refinePath] = {};
                 }
 
-                this.list[refinePath][item.line] = {
+                // Hot migration from old "line" format to new "range" format
+                const rStart = item.range !== undefined ? item.range.start : item.line;
+                const rEnd = item.range !== undefined ? item.range.end : item.line;
+
+                const markerData: MarkerData = {
+                    range: { start: rStart, end: rEnd },
                     content: item.content,
                     color: item.color ? item.color : '#ffffff90'
                 };
+
+                // Map ALL lines within the range to point to the exact same memory object
+                // Preserves O(1) lookup speeds for ANY line overlapping the range
+                for (let l = rStart; l <= rEnd; l++) {
+                    this.list[refinePath][l] = markerData;
+                }
             }
 
             console.dir(this.list, { depth: null, colors: true });
@@ -113,7 +130,7 @@ export class configloader {
     }
 
     // get content from jsonl
-    public get(path: string, line: number) {
+    public get(path: string, line: { start: number, end?: number }) {
 
         path = executor.normalizePath(path);
 
@@ -123,10 +140,18 @@ export class configloader {
             return undefined;
         }
 
-        // Plan B: O(1) direct key lookup - no array.find() needed
-        const entry = this.list[path]?.[line];
-        console.log(entry);
-        return entry ? entry : undefined;
+        // Check if any line in the range has an existing marker
+        const endLine = line.end ?? line.start;
+        for (let l = line.start; l <= endLine; l++) {
+            const entry = this.list[path][l];
+            if (entry) {
+                console.log('Found overlapping entry at line', l, ':', entry);
+                return entry;
+            }
+        }
+
+        console.log('no entry found in range');
+        return undefined;
     }
 
     public getTotalCount(): number {

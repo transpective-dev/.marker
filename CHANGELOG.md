@@ -1,9 +1,3 @@
-# Change Log
-
-All notable changes to the "marker" extension will be documented in this file.
-
-Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how to structure this file.
-
-## [Unreleased]
-
-- Initial release
+[2026/03/09]: 
+- support multi-line comment now
+- auto-close detection could add range by pressing ctrl+alt+e

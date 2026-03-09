@@ -1,157 +1,60 @@
 # 👋 Welcome to .Marker！
 
-> 📌 **Marker** - A Sticky note for Programmers!
+> 📌 **Marker** - A sticky note system for programmers. Write comments anywhere without cluttering your code!
 
 ---
 
-1. [Why it is worth to use?]()
-2. [How to use?]()
-3. [supports and notes]()
+## 🚀 Why Use .Marker?
+
+### 🧩 Core Values
+
+- **🌈 Group by Color** - Differentiate comment types by high-contrast highlights.
+- **📄 Cross-Language Support** - Persistent comments for any language, even JSON or plain text.
+- **🔍 Lens Mode** - Read comments via Hover or CodeLens without leaving the codebase.
+- **⚡ Zero Pollution** - Comments are stored in a separate `.marker-storage/` folder, keeping your git diffs clean.
+
+### 🆚 Contrast
+
+| Original Comments              | .Marker                    |
+| :----------------------------- | :------------------------- |
+| ✅ Quick edit                  | ✅ Integrated VS Code menu |
+| ❌ Pollute project diffs       | ✅ Transparent storage     |
+| ❌ Some languages lack support | ✅ Universal support       |
+| ❌ Visual noise                | ✅ Toggleable visibility   |
 
 ---
 
-## Why it is worth to use ?
+## 🛠️ How to Use
 
-### core values
+### Function List
 
-- **group by color** - could differentiate comment type by highlights directly
-  - 🔴 red = denger or there's a bugs
-  - 🟡 yellow = need to fix
-  - 🟢 green = good code. dont touch
-  - ...etc
+- **Add/Edit**: Right-click or use `Ctrl + Alt + .` to add/edit a comment.
+- **Delete**: Remove markers via the QuickPick menu.
+- **Refresh**: Manually sync changes to disk if needed (though we handle most cases automatically).
+- **Expand**: Use `Ctrl + Alt + E` to automatically expand a marker to the nearest `{}`, `[]`, or `()` block.
 
-- 📄 **cross-language support** - It makes you able to write comment at everywhere. even the json! (with same format!)
+### ⌨️ Shortcuts
 
-- 🔍 **Lens comment** - allows you to read comment by hover over on code or highlight mode without clutter project ! 
-
-### Why Marker？
-
-| original comment | Marker |
-| :--- | :--- |
-| ✅ quick check and edit | ✅ bit of complex but still fine! |
-| ❌ pollute project | ✅ check comment with pollution! |
-| ❌ not all language support comment | ✅ but we can! |
-| ❌ inconsistent format | ✅ one format, use in everywhere! |
-| ❌ disparated comments | ✅ manage them in one place! |
+| Action               | Shortcut                             |
+| :------------------- | :----------------------------------- |
+| **Add/Edit Comment** | `Ctrl + Alt + .`                     |
+| **Expand Range**     | `Ctrl + Alt + E`                     |
+| **Toggle Highlight** | Click the **Eye Icon** in status bar |
 
 ---
 
-## how to use ?
+## 🧬 Intelligent Line Tracking (Phase 3.5 Engine)
 
-### function list 
+We use a high-precision boundary tracking engine (Commit `cf4eb2` Logic) to ensure your markers follow your code:
 
-| function | explain | show condition |
-| :--- | :--- | :--- |
-| **Add** | add new comment | if line hasnt comment |
-| **Edit** | edit comment | if line has comment |
-| **Delete** | delete | if line has comment  |
-| **Refresh** | refresh changes | always |
-
-> ⚠️ **Add** and **Edit** are never shows at same time.
+- ✅ **Automatic Drift**: Markers move down when you insert lines above them.
+- ✅ **Dynamic Expansion**: Pressing `Enter` inside a highlighted block expands the range automatically.
+- ✅ **Head/Tail Protection**: Intelligent detection of line-start insertions prevents marker "usurpation."
 
 ---
 
-### open menu
+## 🤝 Community
 
-| howto | shortcut/method |
-| :--- | :--- |
-| **open input box by shortcut** | `Ctrl + Alt + .` |
-| **open box from rightclick menu** | rightclick at line where you want to add/edit |
-
----
-
-### highlight
-
-![](https://github.com/transpective-dev/.marker/blob/main/readme/image.png)
-
-> a **Eye Icon** will be shown after download extension like pic on above
-
-#### click eye to 
-
-1. ✅ **Toggle Highlight On/Off** - toggle of/off highlight mode
-2. 🎨 **comment visualization** - check comments withoud hover over the lines!
-3. 🌈 **markup lines with matched color** - markup lines with color you selected!
-
----
-
-## support and notes
-
-### 支持环境
-
-| 项目 | 要求 |
-| :--- | :--- |
-| **VS Code** | `1.100.0+` |
-| **can use md format for comment?** | `yes!` |
-
----
-
-### about bugs and things you should know
-
-#### about Refresh
-
-> you must have to refresh with your own hand.
-> we'd considered to use onDidSaveTextDocument for the refresh,
-> but, that'll be too denger if user using auto-save.
-> so, we decided to use manual refresh for write changedList to .marker.jsonl!
-
-the refresh will be call by
-
-'onDidCloseTextDocument': when you close your file that has been changed.
-'deactivate': when extension turns off.
-'manual refresh': refresh from function bar
-
-also, write change into file takes time.
-please refresh manually if there is too many comment in file.
-
----
-
-#### how many .marker.jsonl?
-
-current version only support one file as you can see from the code.
-
-but we are planning to increase detectable file count at somewhere version.
-
----
-
-#### about changing lines
-
-> ⚠️ ** we only able to track the line changes by the ways in below**
-
-- ✅ change from last of previous line
-- ✅ use `Ctrl + Shift + Enter`
-
-> ❌ **we currently cannot tracking the line changing by changing line from codehead **
-
----
-
-### 🐛 about bugs
-
-> feedback about bugs and improvements are very welcome！
-> tell me anytime!
-
----
-
-## 🤝 in the end
-
-thanks for reading this far！❤️
-
-and those are full introduction about '.marker'。
-
-###  concept
-
->  **comment, is most closely thing to the every programmers.**
-> 
-> i hope everyone can use good thing from bottom of my heart as a member of the programmer community 
-> 
-> so, i really hope you guys feel free to send me feedback for our project, and everyones coding life.
-> 
-> this project is not just belongs to me, but belongs to everyone who wants to use a good stuff.
->
-> thanks for reading again
----
-
-<div align="center">
+Feedback and bug reports are highly welcome! This project belongs to everyone who wants a cleaner coding experience.
 
 **Made with ❤️ by the Marker Community and transpective dev team**
-
-</div>

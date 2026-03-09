@@ -1,10 +1,16 @@
 import { appendFile, readFile, writeFile } from "fs/promises";
+import * as vscode from "vscode";
 
-interface ctt {
-    line: number,
-    path: string,
-    color: string,
-    content: string,
+export interface MarkerRange {
+    start: number;
+    end: number;
+}
+
+export interface MarkerAnnotation {
+    range: MarkerRange;
+    path: string;
+    color: string;
+    content: string;
 }
 
 export class executor {
@@ -51,13 +57,13 @@ export class executor {
 
     }
 
-    public async writeIntoMarker(path: string, ctt: ctt) {
+    public async writeIntoMarker(path: string, ctt: MarkerAnnotation) {
 
         // Path is already a properly encoded file:// URI provided by VS Code
         const normalizedPath = ctt.path;
 
         const record = {
-            line: ctt.line,
+            range: { start: ctt.range.start, end: ctt.range.end },
             path: normalizedPath,
             color: ctt.color,
             content: ctt.content
@@ -72,18 +78,29 @@ export class executor {
 
         // refresh marker file
         if (!list) { return; }
-    
+
         const lines: string[] = [];
-        // Traverse the nested dict: list[path][line] = {content, color}
+        const seen = new Set<string>();
+
+        // Traverse the nested dict: list[path][line] = MarkerData
         for (const [filePath, markersAtLines] of Object.entries(list)) {
             for (const [lineStr, data] of Object.entries(markersAtLines as any)) {
-                const record = {
-                    line: parseInt(lineStr),
-                    path: filePath,
-                    color: (data as any).color,
-                    content: (data as any).content
-                };
-                lines.push(JSON.stringify(record));
+
+                const d = data as any;
+                const uniqueKey = `${filePath}:${d.range.start}-${d.range.end}-${d.color}-${d.content}`;
+
+                // Deduplicate mapping (since 1 MarkerData can map to N lines)
+                if (!seen.has(uniqueKey)) {
+                    seen.add(uniqueKey);
+
+                    const record = {
+                        range: { start: d.range.start, end: d.range.end },
+                        path: filePath,
+                        color: d.color,
+                        content: d.content
+                    };
+                    lines.push(JSON.stringify(record));
+                }
             }
         }
         // Overwrite the entire file with the latest in-memory state
@@ -91,30 +108,36 @@ export class executor {
         return;
     }
 
-    public async recover(cmd: string = 'n', path?: string, ctt?: ctt) {
+    public async recover(cmd: string = 'n', path?: string, ctt?: MarkerAnnotation) {
 
         if (!path || !ctt) { return; };
 
         // 1. Read every line in the NDJSON file
         const raw = await readFile(this.toMarker, 'utf-8');
 
-        // 2. Keep only lines that do NOT match the same path+line (drop the old entry)
+        // 2. Keep only lines that do NOT match the same path+range start (drop the old entry)
         const filtered = raw
             .split('\n')
             .filter(line => {
                 if (!line.trim()) { return false; } // drop empty lines
                 try {
                     const obj = JSON.parse(line);
-                    return !(obj.path === ctt.path && obj.line === ctt.line);
+                    const rStart = obj.range ? obj.range.start : obj.line;
+                    return !(obj.path === ctt.path && rStart === ctt.range.start);
                 } catch {
                     return false; // drop corrupted lines
                 }
             })
             .join('\n');
 
+        if (cmd === 'd') {
+            await writeFile(this.toMarker, filtered + (filtered.length > 0 ? '\n' : ''));
+            return;
+        }
+
         // 3. Build the updated record
         const newRecord = {
-            line: ctt.line,
+            range: { start: ctt.range.start, end: ctt.range.end },
             path: ctt.path,
             color: ctt.color,
             content: ctt.content
@@ -139,31 +162,89 @@ export class lineTracker {
     public static shift(
         list: { [filepath: string]: { [line: number]: { content: string; color: string } } },
         filePath: string,
-        changes: readonly { range: { start: { line: number }; end: { line: number } }; text: string }[]
+        changes: readonly { range: { start: { line: number; character: number }; end: { line: number } }; text: string }[],
+        document: vscode.TextDocument
     ) {
-        const fileMarkers = list[filePath];
-        if (!fileMarkers) { return; }
+        // Initialize with the current state of the file's markers
+        let currentMarkers = list[filePath];
+
+        if (!currentMarkers) { return; }
 
         for (const change of changes) {
-            const startLine = change.range.start.line;
+            const startLine = change.range.start.line + 1; // 1-based VS Code line
+            const char = change.range.start.character;
+
             const oldLineCount = change.range.end.line - change.range.start.line;
             const newLineCount = change.text.split('\n').length - 1;
             const delta = newLineCount - oldLineCount;
 
             if (delta === 0) { continue; }
 
-            // Rebuild the object with shifted keys
-            const updated: typeof fileMarkers = {};
-            for (const lineStr in fileMarkers) {
-                const line = parseInt(lineStr);
-                if (line > startLine + 1) {
-                    // This marker is below the edit → shift it
-                    updated[line + delta] = fileMarkers[lineStr];
+            // 1. Extract unique markers (prevents reference/fusion bugs instantly)
+            const uniqueMarkers = new Set<any>();
+            for (const lineStr in currentMarkers) {
+                uniqueMarkers.add(currentMarkers[lineStr]);
+            }
+
+            const updated: any = {};
+
+            // 2. Process each marker independently
+            for (const oldMarker of uniqueMarkers) {
+                // Immutable Clone
+                const marker = { ...oldMarker, range: { ...oldMarker.range } };
+
+                // 3. Ultra-simple Border Logic
+                const currentLineText = document.lineAt(change.range.start.line).text;
+                const lines = change.text.split('\n');
+
+                // If it's a simple text change (no newlines)
+                if (lines.length <= 1) {
+                    if (startLine < marker.range.start || (startLine === marker.range.start && char === 0)) {
+                        marker.range.start += delta;
+                    }
+                    if (startLine < marker.range.end) {
+                        marker.range.end += delta;
+                    }
                 } else {
-                    // This marker is at or above the edit → keep it
-                    updated[line] = fileMarkers[lineStr];
+                    // Newline inserted (Split or Escape)
+                    const nextLineText = document.lineAt(change.range.start.line + 1).text;
+                    const indentation = lines[lines.length - 1]; // Likely auto-indentation
+
+                    // Virtual Original Length = Left + Right (minus new indentation)
+                    const virtualOriginalLength = currentLineText.length + (nextLineText.length - indentation.length);
+
+                    // Drift: If change is ABOVE or exactly at start-col-0
+                    if (startLine < marker.range.start || (startLine === marker.range.start && char === 0)) {
+                        marker.range.start += delta;
+                    }
+
+                    // Expansion Logic:
+                    // 1. Inside (not the last line)
+                    // 2. On last line AND char < virtualOriginalLength (it was a split)
+                    const isInside = startLine < marker.range.end;
+                    const isSplit = startLine === marker.range.end && char < virtualOriginalLength;
+
+                    if (isInside || isSplit) {
+                        marker.range.end += delta;
+                    }
+                }
+
+                // 4. Safe Bounds Check (prevents negative index crashes)
+                if (marker.range.start < 1) {
+                    marker.range.start = 1;
+                }
+
+                // 5. Build the new map
+                // Only write it back if it hasn't been completely collapsed/deleted
+                if (marker.range.end >= marker.range.start) {
+                    for (let l = marker.range.start; l <= marker.range.end; l++) {
+                        updated[l] = marker;
+                    }
                 }
             }
+
+            // Assign back the newly built snapshot to currentMarkers so the next loop has fresh data
+            currentMarkers = updated;
             list[filePath] = updated;
         }
     }

@@ -21,16 +21,17 @@ class MarkerHoverProvider implements vscode.HoverProvider {
 
 	): vscode.ProviderResult<vscode.Hover> {
 
-		const markerText = this.config.get(executor.normalizePath(document.uri.fsPath), position.line + 1);
+		const markerText = this.config.get(executor.normalizePath(document.uri.fsPath), { start: position.line + 1 });
 
 		console.log(markerText);
 
 		if (markerText) {
 
 			const md = new vscode.MarkdownString();
-
+			// Important: set baseUri so relative paths (./img.png) work inside Hover
+			md.baseUri = document.uri;
 			md.isTrusted = true;
-
+			md.supportHtml = true; // Enable HTML tags like <b>, <i>, <br>, etc.
 			md.appendMarkdown(`${executor.formatEnchance(markerText.content)}`);
 
 			return new vscode.Hover(md);
@@ -45,6 +46,7 @@ import { join } from 'path';
 import { mkdir, writeFile, readdir, readFile } from 'fs/promises';
 import { configloader } from './loader/configLoader';
 import { executor, lineTracker } from './executor';
+import { findEnclosingBlock } from './engine/blockExpander';
 
 let workspacePath: string;
 export let toMarkerPath: string;
@@ -127,7 +129,7 @@ const decoration = () => {
 			}
 		}));
 	}
-}
+};
 
 function updateDecos() {
 
@@ -153,18 +155,34 @@ function updateDecos() {
 	const getList = configLoader.list[currentPath];
 
 	const colorGroups = new Map<string, vscode.Range[]>();
+	const seenRanges = new Set<string>();
 
 	for (const lineStr in getList) {
-		const line = parseInt(lineStr) - 1; // index - 1
-		const color = getList[lineStr].color;
+		const marker = getList[lineStr];
+		const color = marker.color;
+
+		// Deduplicate: each unique multi-line block should only be pushed ONCE
+		// Otherwise, VS Code will layer them, making the background look too thick.
+		const uniqueKey = `${marker.range.start}-${marker.range.end}-${color}-${marker.content}`;
+		if (seenRanges.has(uniqueKey)) { continue; }
+		seenRanges.add(uniqueKey);
+
 		if (!colorGroups.has(color)) {
 			colorGroups.set(color, []);
 		};
 
-		// create a range object, representing the visual range
-		// range(begin, end)
-		colorGroups.get(color)!.push(new vscode.Range(line, 0, line, 0));
+		// VS Code Range is 0-indexed.
+		// Since isWholeLine: true is set in the decoration type, 
+		// any character index (0 to 0) will cover the entire line.
+		colorGroups.get(color)!.push(new vscode.Range(
+			marker.range.start - 1, 0,
+			marker.range.end - 1, 0
+		));
 	}
+
+	// map order: [value, key, map]
+	// style: the form that we defined.
+	// color: the hex.
 	decorationTypes.forEach((style, color) => {
 		const ranges = colorGroups.get(color) || [];
 		currentEditor!.setDecorations(style, ranges);
@@ -194,15 +212,37 @@ const lenses: vscode.CodeLensProvider = {
 		const fileMarkers = configLoader.list[executor.normalizePath(doc.uri.fsPath)];
 
 		// register lenses
+		const seen = new Set<string>();
 		for (const lineStr in fileMarkers) {
-			const line = parseInt(lineStr) - 1;
-			const range = new vscode.Range(line, 0, line, 0);
+
+			// get data from filemarker
+			const markerInfo = fileMarkers[lineStr];
+
+			// get place for comment by reducing one from start
+			const startLine = markerInfo.range.start - 1;
+
+			// If we've already rendered a lens for this marker, skip
+			// to avoid show comment on every line in range.
+			// conbine each line in range to one .
+			const uniqueKey = `${startLine}-${markerInfo.range.end}-${markerInfo.content}`;
+
+			// if already shown comment, then skip.
+			if (seen.has(uniqueKey)) { continue; }
+
+			// initialize uniqueId
+			seen.add(uniqueKey);
+
+			// where to show comment
+			const range = new vscode.Range(startLine, 0, startLine, 0);
+
+			// set position for lens
 			const lens = new vscode.CodeLens(range);
 
 			lens.command = {
-				title: `[ .Marker ]: ${fileMarkers[lineStr].content}`,
+				title: `[ .Marker ]: ${markerInfo.content}`,
 				command: "marker.addComment", // let the user click to edit
-				arguments: []
+				arguments: [],
+				tooltip: executor.formatEnchance(markerInfo.content)
 			};
 			lenses.push(lens);
 		}
@@ -240,7 +280,7 @@ export function activate(context: vscode.ExtensionContext) {
 	vscode.workspace.onDidChangeTextDocument((event) => {
 		const filePath = executor.normalizePath(event.document.uri.fsPath);
 		console.log('onDidChangeTextDocument: ', filePath);
-		lineTracker.shift(configLoader.list, filePath, event.contentChanges);
+		lineTracker.shift(configLoader.list, filePath, event.contentChanges, event.document);
 		updateDecos();
 		lensEmitter.fire();
 	}, null, context.subscriptions);
@@ -266,7 +306,11 @@ export function activate(context: vscode.ExtensionContext) {
 
 		// Ensure absolute path stability exactly like configLoader
 		const currentPath = executor.normalizePath(editor.document.uri.toString());
-		const currentLine = editor.selection.active.line + 1;
+
+		const currentLine = {
+			start: editor.selection.start.line + 1,
+			end: editor.selection.end.line + 1
+		};
 
 		// Check if there is already a comment on the current line (for 'Edit' option)
 		const existing = configLoader.get(currentPath, currentLine);
@@ -334,7 +378,7 @@ export function activate(context: vscode.ExtensionContext) {
 					if (updated === undefined) { return; }
 
 					await exct.recover('n', toMarkerPath, {
-						line: currentLine,
+						range: existing.range,
 						path: currentPath,
 						color: existing.color,
 						content: updated
@@ -349,7 +393,7 @@ export function activate(context: vscode.ExtensionContext) {
 					if (!updated) { return; }
 
 					await exct.recover('n', toMarkerPath, {
-						line: currentLine,
+						range: existing.range,
 						path: currentPath,
 						color: updated.label!,
 						content: existing.content
@@ -368,7 +412,7 @@ export function activate(context: vscode.ExtensionContext) {
 				if (!colorOption) { return; }
 				if (content === undefined) { return; }
 				await exct.writeIntoMarker(toMarkerPath, {
-					line: currentLine,
+					range: { start: currentLine.start, end: currentLine.end },
 					path: currentPath,
 					color: colorOption.label!,
 					content: content
@@ -377,8 +421,15 @@ export function activate(context: vscode.ExtensionContext) {
 				await exct.refresh(configLoader.list);
 				vscode.window.showInformationMessage('Refreshed');
 			} else if (selected.description === 'delete') {
-				delete configLoader.list[currentPath][currentLine];
-				await exct.refresh(configLoader.list);
+				const markerToDelete = configLoader.list[currentPath][currentLine.start];
+
+				// use for to delete multi-line highlight
+				if (markerToDelete) {
+					for (let l = markerToDelete.range.start; l <= markerToDelete.range.end; l++) {
+						delete configLoader.list[currentPath][l];
+					}
+					await exct.refresh(configLoader.list);
+				}
 			}
 		});
 
@@ -393,6 +444,57 @@ export function activate(context: vscode.ExtensionContext) {
 		lensEmitter.fire();
 	});
 
+	// --- marker.expandRange ---
+	// External engine for {} [] (): Finds the nearest open bracket upward and uses a stack to find the matching close bracket downward.
+	const expandRange = vscode.commands.registerCommand('marker.expandRange', async () => {
+
+		const editor = vscode.window.activeTextEditor;
+		if (!editor) { return; }
+
+		const doc = editor.document;
+		const currentPath = executor.normalizePath(doc.uri.toString());
+		const cursorLine = editor.selection.active.line; // 0-based
+
+		// 1. Check if the current line has a Marker
+		const existing = configLoader.list[currentPath]?.[cursorLine + 1];
+		if (!existing) {
+			vscode.window.showWarningMessage('.Marker: No marker found at cursor line to expand.');
+			return;
+		}
+
+		// 2. Delegate calculation logic to the minimalist engine
+		const block = findEnclosingBlock(doc, cursorLine);
+
+		if (!block) {
+			vscode.window.showWarningMessage('.Marker: Could not find enclosing {}, [], or () block.');
+			return;
+		}
+
+		const newStart = block.start;
+		const newEnd = block.end;
+
+		// 3. Check if the range has actually expanded
+		if (existing.range.start === newStart && existing.range.end === newEnd) {
+			return; // Already expanded to limit, no redraw needed
+		}
+
+		// 4. Clean up old highlight memory
+		for (let l = existing.range.start; l <= existing.range.end; l++) {
+			delete configLoader.list[currentPath][l];
+		}
+
+		// 5. Write the new expanded range
+		await exct.recover('n', toMarkerPath, {
+			range: { start: newStart, end: newEnd },
+			path: currentPath,
+			color: existing.color,
+			content: existing.content
+		});
+
+		vscode.window.showInformationMessage(`.Marker: Expanded to lines ${newStart} - ${newEnd}`);
+	});
+
+
 	forDebug(context, configLoader, 'marker.debug');
 
 	const register = [
@@ -400,7 +502,8 @@ export function activate(context: vscode.ExtensionContext) {
 		lensRegistration,
 		configLoader.watcher,
 		addComment,
-		highLight
+		highLight,
+		expandRange
 	];
 
 	context.subscriptions.push(...register);
