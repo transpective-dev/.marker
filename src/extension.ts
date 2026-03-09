@@ -46,7 +46,7 @@ import { join } from 'path';
 import { mkdir, writeFile, readdir, readFile } from 'fs/promises';
 import { configloader } from './loader/configLoader';
 import { executor, lineTracker } from './executor';
-import { findEnclosingBlock } from './engine/bracketMatcher';
+import { findEnclosingBlock } from './engine/blockExpander';
 
 let workspacePath: string;
 export let toMarkerPath: string;
@@ -280,7 +280,7 @@ export function activate(context: vscode.ExtensionContext) {
 	vscode.workspace.onDidChangeTextDocument((event) => {
 		const filePath = executor.normalizePath(event.document.uri.fsPath);
 		console.log('onDidChangeTextDocument: ', filePath);
-		lineTracker.shift(configLoader.list, filePath, event.contentChanges);
+		lineTracker.shift(configLoader.list, filePath, event.contentChanges, event.document);
 		updateDecos();
 		lensEmitter.fire();
 	}, null, context.subscriptions);
@@ -445,45 +445,55 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	// --- marker.expandRange ---
-	// Detects the enclosing code block bracket pair from the cursor position,
-	// then stretches the current marker's range to cover the entire block.
+	// 适配 {} [] () 的外置极简引擎
 	const expandRange = vscode.commands.registerCommand('marker.expandRange', async () => {
 
 		const editor = vscode.window.activeTextEditor;
 		if (!editor) { return; }
 
-		const currentPath = executor.normalizePath(editor.document.uri.toString());
+		const doc = editor.document;
+		const currentPath = executor.normalizePath(doc.uri.toString());
 		const cursorLine = editor.selection.active.line; // 0-based
 
-		// Find existing marker at cursor position
+		// 1. 检查光标所在行是否有 Marker
 		const existing = configLoader.list[currentPath]?.[cursorLine + 1];
 		if (!existing) {
 			vscode.window.showWarningMessage('.Marker: No marker found at cursor line to expand.');
 			return;
 		}
 
-		// Run the bracket matching engine (returns 1-based line numbers)
-		const block = findEnclosingBlock(editor.document, cursorLine);
+		// 2. 将计算逻辑交给极简引擎
+		const block = findEnclosingBlock(doc, cursorLine);
+
 		if (!block) {
-			vscode.window.showWarningMessage('.Marker: Could not find enclosing block from cursor position.');
+			vscode.window.showWarningMessage('.Marker: Could not find enclosing {}, [], or () block.');
 			return;
 		}
 
-		// Remove old range from memory
+		const newStart = block.start;
+		const newEnd = block.end;
+
+		// 3. 检查范围是否发生实质性扩大
+		if (existing.range.start === newStart && existing.range.end === newEnd) {
+			return; // 已经扩展到极限，无需重绘
+		}
+
+		// 4. 清理旧的高光内存
 		for (let l = existing.range.start; l <= existing.range.end; l++) {
 			delete configLoader.list[currentPath][l];
 		}
 
-		// Write the new expanded range to disk
+		// 5. 写入新的扩展范围
 		await exct.recover('n', toMarkerPath, {
-			range: { start: block.start, end: block.end },
+			range: { start: newStart, end: newEnd },
 			path: currentPath,
 			color: existing.color,
 			content: existing.content
 		});
 
-		vscode.window.showInformationMessage(`.Marker: Range expanded to lines ${block.start}–${block.end}`);
+		vscode.window.showInformationMessage(`.Marker: Expanded to lines ${newStart} - ${newEnd}`);
 	});
+
 
 	forDebug(context, configLoader, 'marker.debug');
 

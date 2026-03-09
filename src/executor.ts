@@ -1,4 +1,5 @@
 import { appendFile, readFile, writeFile } from "fs/promises";
+import * as vscode from "vscode";
 
 export interface MarkerRange {
     start: number;
@@ -161,64 +162,89 @@ export class lineTracker {
     public static shift(
         list: { [filepath: string]: { [line: number]: { content: string; color: string } } },
         filePath: string,
-        changes: readonly { range: { start: { line: number }; end: { line: number } }; text: string }[]
+        changes: readonly { range: { start: { line: number; character: number }; end: { line: number } }; text: string }[],
+        document: vscode.TextDocument
     ) {
-        const fileMarkers = list[filePath];
+        // Initialize with the current state of the file's markers
+        let currentMarkers = list[filePath];
 
-        if (!fileMarkers) { return; }
+        if (!currentMarkers) { return; }
 
         for (const change of changes) {
+            const startLine = change.range.start.line + 1; // 1-based VS Code line
+            const char = change.range.start.character;
 
-            // new line start 
-            const startLine = change.range.start.line;
-
-            // get old linecount by subtract start from end
             const oldLineCount = change.range.end.line - change.range.start.line;
-
-            // get new linecount 
             const newLineCount = change.text.split('\n').length - 1;
-
-            // calc shift
             const delta = newLineCount - oldLineCount;
 
             if (delta === 0) { continue; }
 
-            // Rebuild the object with shifted keys
+            // 1. Extract unique markers (prevents reference/fusion bugs instantly)
+            const uniqueMarkers = new Set<any>();
+            for (const lineStr in currentMarkers) {
+                uniqueMarkers.add(currentMarkers[lineStr]);
+            }
+
             const updated: any = {};
 
-            const shiftedRanges = new Set<string>();
+            // 2. Process each marker independently
+            for (const oldMarker of uniqueMarkers) {
+                // Immutable Clone
+                const marker = { ...oldMarker, range: { ...oldMarker.range } };
 
-            for (const lineStr in fileMarkers) {
-                const line = parseInt(lineStr);
-                const marker: any = fileMarkers[lineStr];
+                // 3. Ultra-simple Border Logic
+                const currentLineText = document.lineAt(change.range.start.line).text;
+                const lines = change.text.split('\n');
 
-                // Check if we need to shift the range bounds (do this exactly once per unique marker)
-                const uniqueKey = `${marker.range.start}-${marker.range.end}-${marker.content}`;
-                if (!shiftedRanges.has(uniqueKey)) {
+                // If it's a simple text change (no newlines)
+                if (lines.length <= 1) {
+                    if (startLine < marker.range.start || (startLine === marker.range.start && char === 0)) {
+                        marker.range.start += delta;
+                    }
+                    if (startLine < marker.range.end) {
+                        marker.range.end += delta;
+                    }
+                } else {
+                    // Newline inserted (Split or Escape)
+                    const nextLineText = document.lineAt(change.range.start.line + 1).text;
+                    const indentation = lines[lines.length - 1]; // Likely auto-indentation
 
-                    shiftedRanges.add(uniqueKey);
+                    // Virtual Original Length = Left + Right (minus new indentation)
+                    const virtualOriginalLength = currentLineText.length + (nextLineText.length - indentation.length);
 
-                    // how to make shift?
-                    // if we changed line at above of range.start, then we shift down.
-                    // otherwise, we shift up or stay if start hasnt change
-                    if (marker.range.start >= startLine + 1) {
+                    // Drift: If change is ABOVE or exactly at start-col-0
+                    if (startLine < marker.range.start || (startLine === marker.range.start && char === 0)) {
                         marker.range.start += delta;
                     }
 
-                    // same as start but end version.
-                    if (marker.range.end >= startLine + 1) {
+                    // Expansion Logic:
+                    // 1. Inside (not the last line)
+                    // 2. On last line AND char < virtualOriginalLength (it was a split)
+                    const isInside = startLine < marker.range.end;
+                    const isSplit = startLine === marker.range.end && char < virtualOriginalLength;
+
+                    if (isInside || isSplit) {
                         marker.range.end += delta;
                     }
-
                 }
 
-                // replace if position has change.
-                if (line >= startLine + 1) {
-                    updated[line + delta] = marker;
-                } else {
-                    updated[line] = marker;
+                // 4. Safe Bounds Check (prevents negative index crashes)
+                if (marker.range.start < 1) {
+                    marker.range.start = 1;
+                }
+
+                // 5. Build the new map
+                // Only write it back if it hasn't been completely collapsed/deleted
+                if (marker.range.end >= marker.range.start) {
+                    for (let l = marker.range.start; l <= marker.range.end; l++) {
+                        updated[l] = marker;
+                    }
                 }
             }
+
+            // Assign back the newly built snapshot to currentMarkers so the next loop has fresh data
+            currentMarkers = updated;
             list[filePath] = updated;
         }
     }
