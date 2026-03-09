@@ -445,7 +445,7 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	// --- marker.expandRange ---
-	// 适配 {} [] () 的外置极简引擎
+	// External engine for {} [] (): Finds the nearest open bracket upward and uses a stack to find the matching close bracket downward.
 	const expandRange = vscode.commands.registerCommand('marker.expandRange', async () => {
 
 		const editor = vscode.window.activeTextEditor;
@@ -455,14 +455,14 @@ export function activate(context: vscode.ExtensionContext) {
 		const currentPath = executor.normalizePath(doc.uri.toString());
 		const cursorLine = editor.selection.active.line; // 0-based
 
-		// 1. 检查光标所在行是否有 Marker
+		// 1. Check if the current line has a Marker
 		const existing = configLoader.list[currentPath]?.[cursorLine + 1];
 		if (!existing) {
 			vscode.window.showWarningMessage('.Marker: No marker found at cursor line to expand.');
 			return;
 		}
 
-		// 2. 将计算逻辑交给极简引擎
+		// 2. Delegate calculation logic to the minimalist engine
 		const block = findEnclosingBlock(doc, cursorLine);
 
 		if (!block) {
@@ -473,17 +473,17 @@ export function activate(context: vscode.ExtensionContext) {
 		const newStart = block.start;
 		const newEnd = block.end;
 
-		// 3. 检查范围是否发生实质性扩大
+		// 3. Check if the range has actually expanded
 		if (existing.range.start === newStart && existing.range.end === newEnd) {
-			return; // 已经扩展到极限，无需重绘
+			return; // Already expanded to limit, no redraw needed
 		}
 
-		// 4. 清理旧的高光内存
+		// 4. Clean up old highlight memory
 		for (let l = existing.range.start; l <= existing.range.end; l++) {
 			delete configLoader.list[currentPath][l];
 		}
 
-		// 5. 写入新的扩展范围
+		// 5. Write the new expanded range
 		await exct.recover('n', toMarkerPath, {
 			range: { start: newStart, end: newEnd },
 			path: currentPath,
