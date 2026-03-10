@@ -20,7 +20,7 @@ export type note_ls = {
 
 
 import * as vscode from 'vscode';
-import { executor } from '../executor';
+import { Executor } from '../executor';
 
 export class configloader {
 
@@ -94,7 +94,7 @@ export class configloader {
 
             for (const item of i) {
 
-                const refinePath = executor.normalizePath(item.path);
+                const refinePath = Executor.normalizePath(item.path);
 
                 // Plan B: store as nested key map instead of array
                 if (!this.list[refinePath]) {
@@ -132,7 +132,7 @@ export class configloader {
     // get content from jsonl
     public get(path: string, line: { start: number, end?: number }) {
 
-        path = executor.normalizePath(path);
+        path = Executor.normalizePath(path);
 
         // Find if line exists in the file's marker list
         if (!this.list[path]) {

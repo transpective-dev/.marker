@@ -21,7 +21,7 @@ class MarkerHoverProvider implements vscode.HoverProvider {
 
 	): vscode.ProviderResult<vscode.Hover> {
 
-		const markerText = this.config.get(executor.normalizePath(document.uri.fsPath), { start: position.line + 1 });
+		const markerText = this.config.get(Executor.normalizePath(document.uri.fsPath), { start: position.line + 1 });
 
 		console.log(markerText);
 
@@ -32,7 +32,7 @@ class MarkerHoverProvider implements vscode.HoverProvider {
 			md.baseUri = document.uri;
 			md.isTrusted = true;
 			md.supportHtml = true; // Enable HTML tags like <b>, <i>, <br>, etc.
-			md.appendMarkdown(`${executor.formatEnchance(markerText.content)}`);
+			md.appendMarkdown(`${Executor.formatEnchance(markerText.content)}`);
 
 			return new vscode.Hover(md);
 
@@ -45,38 +45,40 @@ class MarkerHoverProvider implements vscode.HoverProvider {
 import { join } from 'path';
 import { mkdir, writeFile, readdir, readFile } from 'fs/promises';
 import { configloader } from './loader/configLoader';
-import { executor, lineTracker } from './executor';
+import { Executor, lineTracker } from './executor';
 import { findEnclosingBlock } from './engine/blockExpander';
 
 let workspacePath: string;
 export let toMarkerPath: string;
-export let exct: executor;
+export let exct: Executor;
 
-const initializeFile = async (storagePath: string, jsonlPath: string) => {
+const initializeFile = async (storagePath: string) => {
 	try {
-		// Check if storage directory exists
-		try {
-			await readdir(storagePath);
-			// If it exists, check if the file exists
-			try {
-				await readFile(jsonlPath);
-				return; // File exists, we are good
-			} catch {
-				// File doesn't exist, create it below
-			}
-		} catch {
-			// Directory doesn't exist, create it
-			await mkdir(storagePath, { recursive: true });
+
+		const fileLs = await readdir(storagePath);
+
+		if (!fileLs.includes('.marker.jsonl')) {
+			const content = {
+				line: 1,
+				path: Executor.normalizePath(join(storagePath, '.marker.jsonl')),
+				color: 'green',
+				content: 'welcome to .marker!'
+			};
+
+			await writeFile(join(storagePath, '.marker.jsonl'), JSON.stringify(content) + '\n');
 		}
 
-		const content = {
-			line: 1,
-			path: executor.normalizePath(jsonlPath),
-			color: 'green',
-			content: 'welcome to .marker!'
-		};
+		if (!fileLs.includes('config.json')) {
+			const config = {
+				settings: {
+					high_light_status: 'text/HL'
+				},
+				color: []
+			}
+			await writeFile(join(storagePath, 'config.json'), JSON.stringify(config, null, 2));
+		}
 
-		await writeFile(jsonlPath, JSON.stringify(content) + '\n');
+
 	} catch (e) {
 		console.error('Failed to initialize .marker storage:', e);
 	}
@@ -148,7 +150,7 @@ function updateDecos() {
 	}
 
 	// Ensure absolute path stability exactly like configLoader
-	const currentPath = executor.normalizePath(currentEditor!.document.uri.toString());
+	const currentPath = Executor.normalizePath(currentEditor!.document.uri.toString());
 
 	console.log(currentPath);
 
@@ -209,7 +211,7 @@ const lenses: vscode.CodeLensProvider = {
 		if (!isHighlightEnabled) { return []; }
 
 		// get content from loader
-		const fileMarkers = configLoader.list[executor.normalizePath(doc.uri.fsPath)];
+		const fileMarkers = configLoader.list[Executor.normalizePath(doc.uri.fsPath)];
 
 		// register lenses
 		const seen = new Set<string>();
@@ -242,7 +244,7 @@ const lenses: vscode.CodeLensProvider = {
 				title: `[ .Marker ]: ${markerInfo.content}`,
 				command: "marker.addComment", // let the user click to edit
 				arguments: [],
-				tooltip: executor.formatEnchance(markerInfo.content)
+				tooltip: Executor.formatEnchance(markerInfo.content)
 			};
 			lenses.push(lens);
 		}
@@ -250,6 +252,10 @@ const lenses: vscode.CodeLensProvider = {
 		return lenses;
 	}
 };
+
+import { QuickPick } from './qp';
+
+const quick_p = new QuickPick();
 
 export function activate(context: vscode.ExtensionContext) {
 
@@ -266,7 +272,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// 2. Initialize Core Logic
 	configLoader = new configloader(workspacePath);
-	exct = new executor(toMarkerPath);
+	exct = new Executor(toMarkerPath);
 
 	// Sync: when marker data changes, re-draw highlights
 	configLoader.setOnUpdate(() => { updateDecos(); });
@@ -278,7 +284,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Sync: when user edits code, shift marker line numbers to follow
 	vscode.workspace.onDidChangeTextDocument((event) => {
-		const filePath = executor.normalizePath(event.document.uri.fsPath);
+		const filePath = Executor.normalizePath(event.document.uri.fsPath);
 		console.log('onDidChangeTextDocument: ', filePath);
 		lineTracker.shift(configLoader.list, filePath, event.contentChanges, event.document);
 		updateDecos();
@@ -287,7 +293,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	decoration();
 
-	initializeFile(workspacePath, toMarkerPath);
+	initializeFile(workspacePath);
 
 	console.log('Marker Loaded!');
 
@@ -296,6 +302,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const provider = new MarkerHoverProvider(configLoader);
 
 	const hoverRegistration = vscode.languages.registerHoverProvider({ pattern: '**' }, provider);
+
 	const lensRegistration = vscode.languages.registerCodeLensProvider({ pattern: '**' }, lenses);
 
 	const addComment = vscode.commands.registerCommand('marker.addComment', async () => {
@@ -305,7 +312,7 @@ export function activate(context: vscode.ExtensionContext) {
 		if (!editor) { return; }
 
 		// Ensure absolute path stability exactly like configLoader
-		const currentPath = executor.normalizePath(editor.document.uri.toString());
+		const currentPath = Executor.normalizePath(editor.document.uri.toString());
 
 		const currentLine = {
 			start: editor.selection.start.line + 1,
@@ -320,34 +327,22 @@ export function activate(context: vscode.ExtensionContext) {
 		qp.placeholder = 'Select Option';
 
 		// Build the static option list
-		const items = [existing ? {
-			label: 'Edit Comment',
-			description: 'edit',
-		} : {
-			label: 'Add Comment',
-			description: 'add',
-		}];
-
-		// push recover
+		const items = [existing ? quick_p.items.edit : quick_p.items.add];
 
 		const lsItems = [
-			{
-				label: 'Refresh Comment Change',
-				description: 'recover',
-			},
-			{
-				label: 'Delete Comment',
-				description: 'delete',
-			}
+			quick_p.items.refresh,
+			quick_p.items.delete,
+			quick_p.items.config
 		];
 
 		items.push(...lsItems);
 
 		qp.items = items;
 
-
 		qp.onDidAccept(async () => {
+			
 			const selected = qp.selectedItems[0];
+
 			qp.hide();
 
 			if (!selected) { return; }
@@ -452,7 +447,7 @@ export function activate(context: vscode.ExtensionContext) {
 		if (!editor) { return; }
 
 		const doc = editor.document;
-		const currentPath = executor.normalizePath(doc.uri.toString());
+		const currentPath = Executor.normalizePath(doc.uri.toString());
 		const cursorLine = editor.selection.active.line; // 0-based
 
 		// 1. Check if the current line has a Marker

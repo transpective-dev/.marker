@@ -13,7 +13,7 @@ export interface MarkerAnnotation {
     content: string;
 }
 
-export class executor {
+export class Executor {
 
     private toMarker: string = '';
 
@@ -41,7 +41,7 @@ export class executor {
 
     public static formatEnchance = (content: string) => {
         let result = content;
-        executor.mdChangeLs.forEach((value, key) => {
+        Executor.mdChangeLs.forEach((value, key) => {
             // Using a simple split/join for better performance on large strings
             result = result.split(key).join(value);
         });
@@ -51,9 +51,9 @@ export class executor {
     constructor(path: string) {
         this.toMarker = path;
 
-        executor.mdChangeLs.set('\\n', '\n\n');    // User input \n becomes Markdown newline
-        executor.mdChangeLs.set('\\t', '    ');   // Tabs to 4 spaces
-        executor.mdChangeLs.set('---', '  \n\n---\n\n'); // Horizontal rule
+        Executor.mdChangeLs.set('\\n', '\n\n');    // User input \n becomes Markdown newline
+        Executor.mdChangeLs.set('\\t', '    ');   // Tabs to 4 spaces
+        Executor.mdChangeLs.set('---', '  \n\n---\n\n'); // Horizontal rule
 
     }
 
