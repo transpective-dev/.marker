@@ -11,6 +11,7 @@ export interface MarkerAnnotation {
     path: string;
     color: string;
     content: string;
+    alt: string;
 }
 
 export class Executor {
@@ -46,7 +47,7 @@ export class Executor {
             result = result.split(key).join(value);
         });
         return result;
-    }
+    };
 
     constructor(path: string) {
         this.toMarker = path;
@@ -66,7 +67,8 @@ export class Executor {
             range: { start: ctt.range.start, end: ctt.range.end },
             path: normalizedPath,
             color: ctt.color,
-            content: ctt.content
+            content: ctt.content,
+            alt: ctt.alt
         };
 
         // NDJSON: one JSON object per line, appended directly
@@ -97,7 +99,8 @@ export class Executor {
                         range: { start: d.range.start, end: d.range.end },
                         path: filePath,
                         color: d.color,
-                        content: d.content
+                        content: d.content,
+                        alt: d.alt ? d.alt : ''
                     };
                     lines.push(JSON.stringify(record));
                 }
@@ -140,7 +143,8 @@ export class Executor {
             range: { start: ctt.range.start, end: ctt.range.end },
             path: ctt.path,
             color: ctt.color,
-            content: ctt.content
+            content: ctt.content,
+            alt: ctt.alt
         };
 
         // 4. Write filtered content + new record back as one atomic write

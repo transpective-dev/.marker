@@ -22,7 +22,7 @@ export class QuickPick {
         },
         color: {
             label: 'Color',
-            description: 'Change Comment Color'
+            description: 'Customize Color'
         },
         add: {
             label: 'Add',

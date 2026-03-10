@@ -10,6 +10,7 @@ export interface MarkerData {
     range: MarkerRange;
     content: string;
     color: string;
+    alt: string;
 }
 
 export type note_ls = {
@@ -39,6 +40,11 @@ export class configloader {
     // Plan D: debounce timer - only reload after 300ms of silence
     private debounceTimer: NodeJS.Timeout | null = null;
 
+    public reload = () => {
+        if (this.debounceTimer) { clearTimeout(this.debounceTimer); }
+        this.debounceTimer = setTimeout(() => this.loadData(), 300);
+    };
+
     constructor(path: string) {
 
         this.watcher = vscode.workspace.createFileSystemWatcher(
@@ -50,21 +56,15 @@ export class configloader {
 
         this.path = path;
         // initialize
-        this.loadConfig();
+        this.loadData();
         console.log(this.path);
 
-        // Add FileSystemWatcher for hot-reloading (with debounce)
-        const reload = () => {
-            if (this.debounceTimer) { clearTimeout(this.debounceTimer); }
-            this.debounceTimer = setTimeout(() => this.loadConfig(), 300);
-        };
-
-        this.watcher.onDidChange(reload);
-        this.watcher.onDidCreate(reload);
-        this.watcher.onDidDelete(reload);
+        this.watcher.onDidChange(this.reload);
+        this.watcher.onDidCreate(this.reload);
+        this.watcher.onDidDelete(this.reload);
     }
 
-    public async loadConfig() {
+    public async loadData() {
 
         try {
             console.log('reading files...');
@@ -106,7 +106,8 @@ export class configloader {
                 const markerData: MarkerData = {
                     range: { start: rStart, end: rEnd },
                     content: item.content,
-                    color: item.color ? item.color : '#ffffff90'
+                    color: item.color ? item.color : '#00000000',
+                    alt: item.alt ? item.alt : ''
                 };
 
                 // Map ALL lines within the range to point to the exact same memory object
@@ -122,7 +123,7 @@ export class configloader {
             this.onUpdateCallback?.();
 
         } catch (error) {
-            console.error('Marker MVP try-catch caught an error during loadConfig:', error);
+            console.error('Marker MVP try-catch caught an error during loadData:', error);
         }
 
     }

@@ -43,7 +43,7 @@ class MarkerHoverProvider implements vscode.HoverProvider {
 }
 
 import { join } from 'path';
-import { mkdir, writeFile, readdir, readFile } from 'fs/promises';
+import { writeFile, readdir } from 'fs/promises';
 import { configloader } from './loader/configLoader';
 import { Executor, lineTracker } from './executor';
 import { findEnclosingBlock } from './engine/blockExpander';
@@ -65,7 +65,8 @@ const initializeFile = async (storagePath: string) => {
 				line: 1,
 				path: Executor.normalizePath(join(storagePath, '.marker.jsonl')),
 				color: 'green',
-				content: 'welcome to .marker!'
+				content: 'welcome to .marker!',
+				alt: ''
 			};
 
 			await writeFile(join(storagePath, '.marker.jsonl'), JSON.stringify(content) + '\n');
@@ -243,10 +244,9 @@ const lenses: vscode.CodeLensProvider = {
 			const lens = new vscode.CodeLens(range);
 
 			lens.command = {
-				title: `[ .Marker ]: ${markerInfo.content}`,
+				title: `[ .Marker ]: ${markerInfo.alt ? markerInfo.alt : markerInfo.content}`,
 				command: "marker.addComment", // let the user click to edit
 				arguments: [],
-				tooltip: Executor.formatEnchance(markerInfo.content)
 			};
 			lenses.push(lens);
 		}
@@ -340,7 +340,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		const lsItems = [
 			quick_p.items.refresh,
 			quick_p.items.delete,
-			quick_p.items.config
+			quick_p.items.config,
+			quick_p.items.color
 		];
 
 		items.push(...lsItems);
@@ -384,7 +385,8 @@ export async function activate(context: vscode.ExtensionContext) {
 						range: existing.range,
 						path: currentPath,
 						color: existing.color,
-						content: updated
+						content: updated,
+						alt: existing.alt
 					});
 
 				}
@@ -399,10 +401,11 @@ export async function activate(context: vscode.ExtensionContext) {
 						range: existing.range,
 						path: currentPath,
 						color: updated.description,
-						content: existing.content
+						content: existing.content,
+						alt: existing.alt
 					});
 
-				}	
+				}
 
 
 			} else if (selected.label === 'Add' && !existing) {
@@ -412,13 +415,21 @@ export async function activate(context: vscode.ExtensionContext) {
 				});
 
 				const colorOption = await vscode.window.showQuickPick(color_p!, { placeHolder: 'Select Color' });
+
 				if (!colorOption) { return; }
+
 				if (content === undefined) { return; }
+
+				const alt = await vscode.window.showInputBox({
+					prompt: 'Add alt text for highlight'
+				});
+
 				await exct.writeIntoMarker(toMarkerPath, {
 					range: { start: currentLine.start, end: currentLine.end },
 					path: currentPath,
 					color: colorOption.description!,
-					content: content
+					content: content,
+					alt: alt ?? ''
 				});
 			} else if (selected.label === 'Refresh') {
 
@@ -439,6 +450,99 @@ export async function activate(context: vscode.ExtensionContext) {
 
 				// open config file
 				await vscode.window.showTextDocument(vscode.Uri.file(toUserConfig));
+
+			} else if (selected.label === 'Color') {
+
+				const todo = await vscode.window.showQuickPick([
+					{
+						label: 'Add Custom Color',
+						description: 'acc'
+					},
+					{
+						label: 'Edit Color Details',
+						description: 'ecd'
+					},
+					{
+						label: 'Remove Color',
+						description: 'rc'
+					}
+				], { placeHolder: 'Select Color Action' });
+
+				if (!todo) { return; }
+
+				const colors = Config.colorLs;
+
+				if (todo.description === 'acc') {
+					const color = await vscode.window.showInputBox({
+						prompt: 'Add Hex Code'
+					});
+
+					if (!color) { return; }
+					if (!color.startsWith('#') && ![3, 6, 8].includes(color.length)) { vscode.window.showErrorMessage('Invalid color'); return; };
+
+					const label = await vscode.window.showInputBox({
+						prompt: 'Add label'
+					});
+
+					const desc = await vscode.window.showInputBox({
+						prompt: 'Add description'
+					});
+
+					colors.push({ hex: color, label: label ? label : 'No label', desc: desc ? desc : 'No description' });
+				}
+
+				if (todo.description === 'ecd') {
+					// Map colors to QuickPick items keeping original reference
+					const mapped = colors.map(c => ({ label: c.label, description: c.hex, iconPath: toSvgIcon(c.hex), ref: c }));
+					const colorItem = await vscode.window.showQuickPick(mapped, { placeHolder: 'Select Color' });
+
+					if (!colorItem) { return; }
+
+					const index = colors.indexOf(colorItem.ref);
+
+					// Fix: Use property names explicitly rather than Object.keys(array)
+					const target = await vscode.window.showQuickPick(['label', 'desc', 'hex'], { placeHolder: 'Select Target field' });
+
+					if (!target) { return; }
+
+					if (target === 'label') {
+						const label = await vscode.window.showInputBox({
+							prompt: 'Modify label',
+							value: colorItem.ref.label
+						});
+						if (!label) { return; }
+						colors[index].label = label;
+					}
+
+					if (target === 'desc') {
+						const desc = await vscode.window.showInputBox({
+							prompt: 'Modify description',
+							value: colorItem.ref.desc
+						});
+						if (!desc) { return; }
+						colors[index].desc = desc;
+					}
+
+					if (target === 'hex') {
+						const hex = await vscode.window.showInputBox({
+							prompt: 'Modify hex color',
+							value: colorItem.ref.hex
+						});
+						if (!hex) { return; }
+						if (!hex.startsWith('#') && ![3, 6, 8].includes(hex.length)) { vscode.window.showErrorMessage('Invalid color'); return; };
+						colors[index].hex = hex;
+					}
+				}
+
+				if (todo.description === 'rc') {
+					const mapped = colors.map(c => ({ label: c.label, description: c.hex, detail: c.desc, ref: c }));
+					const colorItem = await vscode.window.showQuickPick(mapped, { placeHolder: 'Select Color to Remove' });
+					if (!colorItem) { return; }
+					colors.splice(colors.indexOf(colorItem.ref), 1);
+				}
+
+				// Fix: change ctt to color so it matches config.ts update signature 'payloads.color'
+				await userConfig.update('color', { path: toUserConfig, color: colors });
 			}
 		});
 
@@ -497,7 +601,8 @@ export async function activate(context: vscode.ExtensionContext) {
 			range: { start: newStart, end: newEnd },
 			path: currentPath,
 			color: existing.color,
-			content: existing.content
+			content: existing.content,
+			alt: existing.alt
 		});
 
 		vscode.window.showInformationMessage(`.Marker: Expanded to lines ${newStart} - ${newEnd}`);
