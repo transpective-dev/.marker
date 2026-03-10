@@ -9,28 +9,28 @@ export class QuickPick {
 
     public items: { [key: string]: lsitem } = {
         edit: {
-            label: 'Edit Comment',
-            description: 'edit'
+            label: 'Edit ',
+            description: 'Edit Comment'
         },
         delete: {
-            label: 'Delete Comment',
-            description: 'delete'
+            label: 'Delete',
+            description: 'Delete Comment'
         },
         refresh: {
-            label: 'Refresh Comment Changes',
-            description: 'refresh'
+            label: 'Refresh',
+            description: 'Refresh Comment Changes'
         },
         color: {
-            label: 'Change Comment Color',
-            description: 'color'
+            label: 'Color',
+            description: 'Change Comment Color'
         },
         add: {
-            label: 'Add Comment',
-            description: 'add'
+            label: 'Add',
+            description: 'Add Comment'
         },
         config: {
-            label: 'Edit Config',
-            description: 'config'
+            label: 'Config',
+            description: 'Edit config'
         },
     };
     

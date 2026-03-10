@@ -47,9 +47,12 @@ import { mkdir, writeFile, readdir, readFile } from 'fs/promises';
 import { configloader } from './loader/configLoader';
 import { Executor, lineTracker } from './executor';
 import { findEnclosingBlock } from './engine/blockExpander';
+import { Config } from './toolbox/config';
+import type { color } from './toolbox/config';
 
 let workspacePath: string;
 export let toMarkerPath: string;
+export let toUserConfig: string;
 export let exct: Executor;
 
 const initializeFile = async (storagePath: string) => {
@@ -73,8 +76,14 @@ const initializeFile = async (storagePath: string) => {
 				settings: {
 					high_light_status: 'text/HL'
 				},
-				color: []
-			}
+				color: [
+					{ label: 'Red', hex: '#FF5F56', desc: 'Critical/Bug' },
+					{ label: 'Yellow', hex: '#FFBD2E', desc: 'Warning/Todo' },
+					{ label: 'Green', hex: '#27C93F', desc: 'Good/Complete' },
+					{ label: 'Blue', hex: '#007ACC', desc: 'Info/Note' },
+					{ label: 'Transparent', hex: '#00000000', desc: 'Keep Background Clear' }
+				]
+			};
 			await writeFile(join(storagePath, 'config.json'), JSON.stringify(config, null, 2));
 		}
 
@@ -86,18 +95,6 @@ const initializeFile = async (storagePath: string) => {
 
 // --- Color Palette ---
 
-// Register your colors here. Only touch this array to add/remove colors.
-const palette: string[] = [
-	'#f53c42',
-	'#ff950a',
-	'#EDA536',
-	'#A6A43B',
-	'#88AA66',
-	'#88ABAD',
-	'#4CB3D2',
-	'#69C6FF',
-];
-
 // Generates a 16x16 solid color SVG block from a hex string.
 // '#' must be URI-encoded as '%23' or it breaks the data URI.
 const toSvgIcon = (hex: string): vscode.Uri => {
@@ -107,18 +104,23 @@ const toSvgIcon = (hex: string): vscode.Uri => {
 };
 
 // Map the palette into the shape QuickPick expects - done once, not inside the command.
-const colorPalette = palette.map(hex => ({
-	label: hex,
-	description: '',
-	iconPath: toSvgIcon(hex),
-}));
+const colorPalette = (palette: color[]) => {
+	if (!palette) { return; };
+	return palette.map(item => ({
+		label: item.desc,
+		description: item.hex,
+		iconPath: toSvgIcon(item.hex),
+	}));
+};
 
 // key is hex, value is decoration type
 const decorationTypes = new Map<string, vscode.TextEditorDecorationType>();
 
 // Initialize decoration types
-const decoration = () => {
-	for (const hex of palette) {
+const decoration = (palette: color[]) => {
+	if (!palette) { return; };
+	for (const item of palette) {
+		const hex = item.hex;
 		decorationTypes.set(hex, vscode.window.createTextEditorDecorationType({
 			isWholeLine: true,
 			backgroundColor: hex + '35',
@@ -257,7 +259,7 @@ import { QuickPick } from './qp';
 
 const quick_p = new QuickPick();
 
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
 
 	// 1. Safe Initialization of Workspace Paths
 	const folders = vscode.workspace.workspaceFolders;
@@ -269,6 +271,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const rootPath = folders[0].uri.fsPath;
 	workspacePath = join(rootPath, '.marker-storage');
 	toMarkerPath = join(workspacePath, '.marker.jsonl');
+	toUserConfig = join(workspacePath, 'config.json');
 
 	// 2. Initialize Core Logic
 	configLoader = new configloader(workspacePath);
@@ -291,9 +294,14 @@ export function activate(context: vscode.ExtensionContext) {
 		lensEmitter.fire();
 	}, null, context.subscriptions);
 
-	decoration();
+	await initializeFile(workspacePath);
 
-	initializeFile(workspacePath);
+	const userConfig = new Config(toUserConfig);
+
+	const getColorPallete = userConfig.color()!;
+
+	decoration(getColorPallete);
+	const color_p = colorPalette(getColorPallete);
 
 	console.log('Marker Loaded!');
 
@@ -340,14 +348,14 @@ export function activate(context: vscode.ExtensionContext) {
 		qp.items = items;
 
 		qp.onDidAccept(async () => {
-			
+
 			const selected = qp.selectedItems[0];
 
 			qp.hide();
 
 			if (!selected) { return; }
 
-			if (selected.description === 'edit' && existing) {
+			if (selected.label === 'Edit' && existing) {
 				// --- EDIT MODE: prefill and call recover ---
 
 				const options = await vscode.window.showQuickPick([
@@ -383,39 +391,41 @@ export function activate(context: vscode.ExtensionContext) {
 
 				if (options.description === 'e-color') {
 
-					const updated = await vscode.window.showQuickPick(colorPalette, { placeHolder: 'Select Color' });
+					const updated = await vscode.window.showQuickPick(color_p!, { placeHolder: 'Select Color' });
 
 					if (!updated) { return; }
 
 					await exct.recover('n', toMarkerPath, {
 						range: existing.range,
 						path: currentPath,
-						color: updated.label!,
+						color: updated.description,
 						content: existing.content
 					});
 
 				}
 
 
-			} else if (selected.description === 'add' && !existing) {
+			} else if (selected.label === 'Add' && !existing) {
 				// --- NEW COMMENT MODE ---
 				const content = await vscode.window.showInputBox({
 					prompt: 'Add comment'
 				});
 
-				const colorOption = await vscode.window.showQuickPick(colorPalette, { placeHolder: 'Select Color' });
+				const colorOption = await vscode.window.showQuickPick(color_p!, { placeHolder: 'Select Color' });
 				if (!colorOption) { return; }
 				if (content === undefined) { return; }
 				await exct.writeIntoMarker(toMarkerPath, {
 					range: { start: currentLine.start, end: currentLine.end },
 					path: currentPath,
-					color: colorOption.label!,
+					color: colorOption.description!,
 					content: content
 				});
-			} else if (selected.description === 'recover') {
+			} else if (selected.label === 'Refresh') {
+
 				await exct.refresh(configLoader.list);
 				vscode.window.showInformationMessage('Refreshed');
-			} else if (selected.description === 'delete') {
+
+			} else if (selected.label === 'Delete') {
 				const markerToDelete = configLoader.list[currentPath][currentLine.start];
 
 				// use for to delete multi-line highlight
