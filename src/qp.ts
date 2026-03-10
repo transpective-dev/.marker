@@ -9,7 +9,7 @@ export class QuickPick {
 
     public items: { [key: string]: lsitem } = {
         edit: {
-            label: 'Edit ',
+            label: 'Edit',
             description: 'Edit Comment'
         },
         delete: {

@@ -402,7 +402,7 @@ export async function activate(context: vscode.ExtensionContext) {
 						content: existing.content
 					});
 
-				}
+				}	
 
 
 			} else if (selected.label === 'Add' && !existing) {
@@ -435,6 +435,10 @@ export async function activate(context: vscode.ExtensionContext) {
 					}
 					await exct.refresh(configLoader.list);
 				}
+			} else if (selected.label === 'Config') {
+
+				// open config file
+				await vscode.window.showTextDocument(vscode.Uri.file(toUserConfig));
 			}
 		});
 

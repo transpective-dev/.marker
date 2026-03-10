@@ -69,9 +69,7 @@ export class configloader {
         try {
             console.log('reading files...');
 
-            const ls: string[] = await readdir(this.path);
-
-            const newPath = join(this.path, ls[0]);
+            const newPath = join(this.path, '.marker.jsonl');
 
             console.log(newPath);
 
