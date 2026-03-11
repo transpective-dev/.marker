@@ -113,8 +113,5 @@ export class Config {
     public get high_light_status(): 'text' | 'HL' | 'text/HL' {
         return Config.configs?.settings.high_light_status || 'text/HL';
     }
-
-    private async updateSettings(payload: any) {
-
-    }
+    
 }
