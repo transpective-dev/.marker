@@ -57,6 +57,7 @@ export class Config {
 
         switch(type){
             case 'color': 
+            const beforeChange = structuredClone(this.configs?.color);
                 Config.colorLs = payloads.color;
                 const full = {
                     settings: this.configs?.settings,
@@ -67,5 +68,10 @@ export class Config {
             default:
                 break;
         }
+
+    }
+
+    private async updateSettings(payload: any) {
+
     }
 }

@@ -1,259 +1,26 @@
 import * as vscode from 'vscode';
 
-let configLoader: configloader;
-
-let currentEditor: typeof vscode.window.activeTextEditor | null = null;
-
-class MarkerHoverProvider implements vscode.HoverProvider {
-
-	constructor(private config: configloader) { }
-
-	provideHover(
-
-		// tell you where file you at
-		document: vscode.TextDocument,
-
-		// tell you where line you at
-		position: vscode.Position,
-
-		// token
-		token: vscode.CancellationToken
-
-	): vscode.ProviderResult<vscode.Hover> {
-
-		const markerText = this.config.get(Executor.normalizePath(document.uri.fsPath), { start: position.line + 1 });
-
-		console.log(markerText);
-
-		if (markerText) {
-
-			const md = new vscode.MarkdownString();
-			// Important: set baseUri so relative paths (./img.png) work inside Hover
-			md.baseUri = document.uri;
-			md.isTrusted = true;
-			md.supportHtml = true; // Enable HTML tags like <b>, <i>, <br>, etc.
-			md.appendMarkdown(`${Executor.formatEnchance(markerText.content)}`);
-
-			return new vscode.Hover(md);
-
-		}
-
-		return undefined;
-	}
-}
+import { MarkerHoverProvider } from './modules/hover';
+import { initializeFile } from './modules/init';
+import { toSvgIcon, colorPalette, decoration, updateDecos, toggleHighlight, getIsHighlightEnabled } from './modules/highlight';
+import { getLensesProvider } from './modules/lens';
 
 import { join } from 'path';
-import { writeFile, readdir } from 'fs/promises';
 import { configloader } from './loader/configLoader';
 import { Executor, lineTracker } from './executor';
 import { findEnclosingBlock } from './engine/blockExpander';
 import { Config } from './toolbox/config';
 import type { color } from './toolbox/config';
 
+let configLoader: configloader;
+
 let workspacePath: string;
 export let toMarkerPath: string;
 export let toUserConfig: string;
 export let exct: Executor;
 
-const initializeFile = async (storagePath: string) => {
-	try {
-
-		const fileLs = await readdir(storagePath);
-
-		if (!fileLs.includes('.marker.jsonl')) {
-			const content = {
-				line: 1,
-				path: Executor.normalizePath(join(storagePath, '.marker.jsonl')),
-				color: 'green',
-				content: 'welcome to .marker!',
-				alt: ''
-			};
-
-			await writeFile(join(storagePath, '.marker.jsonl'), JSON.stringify(content) + '\n');
-		}
-
-		if (!fileLs.includes('config.json')) {
-			const config = {
-				settings: {
-					high_light_status: 'text/HL'
-				},
-				color: [
-					{ label: 'Red', hex: '#FF5F56', desc: 'Critical/Bug' },
-					{ label: 'Yellow', hex: '#FFBD2E', desc: 'Warning/Todo' },
-					{ label: 'Green', hex: '#27C93F', desc: 'Good/Complete' },
-					{ label: 'Blue', hex: '#007ACC', desc: 'Info/Note' },
-					{ label: 'Transparent', hex: '#00000000', desc: 'Keep Background Clear' }
-				]
-			};
-			await writeFile(join(storagePath, 'config.json'), JSON.stringify(config, null, 2));
-		}
-
-
-	} catch (e) {
-		console.error('Failed to initialize .marker storage:', e);
-	}
-};
-
-// --- Color Palette ---
-
-// Generates a 16x16 solid color SVG block from a hex string.
-// '#' must be URI-encoded as '%23' or it breaks the data URI.
-const toSvgIcon = (hex: string): vscode.Uri => {
-	const encoded = hex.replace('#', '%23');
-	const svg = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="${encoded}" rx="1.5"/></svg>`;
-	return vscode.Uri.parse(svg);
-};
-
-// Map the palette into the shape QuickPick expects - done once, not inside the command.
-const colorPalette = (palette: color[]) => {
-	if (!palette) { return; };
-	return palette.map(item => ({
-		label: item.desc,
-		description: item.hex,
-		iconPath: toSvgIcon(item.hex),
-	}));
-};
-
-// key is hex, value is decoration type
-const decorationTypes = new Map<string, vscode.TextEditorDecorationType>();
-
-// Initialize decoration types
-const decoration = (palette: color[]) => {
-	if (!palette) { return; };
-	for (const item of palette) {
-		const hex = item.hex;
-		decorationTypes.set(hex, vscode.window.createTextEditorDecorationType({
-			isWholeLine: true,
-			backgroundColor: hex + '35',
-			borderStyle: 'solid',
-			borderWidth: '0 0 0 3px',
-			borderColor: hex,
-			before: {
-				contentText: ' ', // add placeholder
-				margin: '0 0 0 12px' // push text 8px away
-			}
-		}));
-	}
-};
-
-function updateDecos() {
-
-	console.log('highlight: ', isHighlightEnabled);
-
-	currentEditor = vscode.window.activeTextEditor;
-
-	if (!currentEditor) { return; } // no editor open, nothing to do
-
-	if (!isHighlightEnabled) {
-		decorationTypes.forEach((value) => {
-			currentEditor!.setDecorations(value, []);
-		});
-		console.log('highlighting disabled');
-		return;
-	}
-
-	// Ensure absolute path stability exactly like configLoader
-	const currentPath = Executor.normalizePath(currentEditor!.document.uri.toString());
-
-	console.log(currentPath);
-
-	const getList = configLoader.list[currentPath];
-
-	const colorGroups = new Map<string, vscode.Range[]>();
-	const seenRanges = new Set<string>();
-
-	for (const lineStr in getList) {
-		const marker = getList[lineStr];
-		const color = marker.color;
-
-		// Deduplicate: each unique multi-line block should only be pushed ONCE
-		// Otherwise, VS Code will layer them, making the background look too thick.
-		const uniqueKey = `${marker.range.start}-${marker.range.end}-${color}-${marker.content}`;
-		if (seenRanges.has(uniqueKey)) { continue; }
-		seenRanges.add(uniqueKey);
-
-		if (!colorGroups.has(color)) {
-			colorGroups.set(color, []);
-		};
-
-		// VS Code Range is 0-indexed.
-		// Since isWholeLine: true is set in the decoration type, 
-		// any character index (0 to 0) will cover the entire line.
-		colorGroups.get(color)!.push(new vscode.Range(
-			marker.range.start - 1, 0,
-			marker.range.end - 1, 0
-		));
-	}
-
-	// map order: [value, key, map]
-	// style: the form that we defined.
-	// color: the hex.
-	decorationTypes.forEach((style, color) => {
-		const ranges = colorGroups.get(color) || [];
-		currentEditor!.setDecorations(style, ranges);
-	});
-
-}
-
-export let isHighlightEnabled = false;
-
 // lens emitter
-const lensEmitter = new vscode.EventEmitter<void>();
-
-const lenses: vscode.CodeLensProvider = {
-
-	// turn on lens when received emit
-	onDidChangeCodeLenses: lensEmitter.event,
-
-	provideCodeLenses(doc) {
-
-		// lens list
-		const lenses: vscode.CodeLens[] = [];
-
-		// gate: only show lenses when highlight is enabled
-		if (!isHighlightEnabled) { return []; }
-
-		// get content from loader
-		const fileMarkers = configLoader.list[Executor.normalizePath(doc.uri.fsPath)];
-
-		// register lenses
-		const seen = new Set<string>();
-		for (const lineStr in fileMarkers) {
-
-			// get data from filemarker
-			const markerInfo = fileMarkers[lineStr];
-
-			// get place for comment by reducing one from start
-			const startLine = markerInfo.range.start - 1;
-
-			// If we've already rendered a lens for this marker, skip
-			// to avoid show comment on every line in range.
-			// conbine each line in range to one .
-			const uniqueKey = `${startLine}-${markerInfo.range.end}-${markerInfo.content}`;
-
-			// if already shown comment, then skip.
-			if (seen.has(uniqueKey)) { continue; }
-
-			// initialize uniqueId
-			seen.add(uniqueKey);
-
-			// where to show comment
-			const range = new vscode.Range(startLine, 0, startLine, 0);
-
-			// set position for lens
-			const lens = new vscode.CodeLens(range);
-
-			lens.command = {
-				title: `[ .Marker ]: ${markerInfo.alt ? markerInfo.alt : markerInfo.content}`,
-				command: "marker.addComment", // let the user click to edit
-				arguments: [],
-			};
-			lenses.push(lens);
-		}
-
-		return lenses;
-	}
-};
+export const lensEmitter = new vscode.EventEmitter<void>();
 
 import { QuickPick } from './qp';
 
@@ -278,10 +45,10 @@ export async function activate(context: vscode.ExtensionContext) {
 	exct = new Executor(toMarkerPath);
 
 	// Sync: when marker data changes, re-draw highlights
-	configLoader.setOnUpdate(() => { updateDecos(); });
+	configLoader.setOnUpdate(() => { updateDecos({ configLoader }); });
 
 	// Sync: when user switches file tab, re-draw for new file
-	vscode.window.onDidChangeActiveTextEditor(() => { updateDecos(); }, null, context.subscriptions);
+	vscode.window.onDidChangeActiveTextEditor(() => { updateDecos({ configLoader }); }, null, context.subscriptions);
 
 	vscode.workspace.onDidCloseTextDocument(() => { exct.refresh(configLoader.list); }, null, context.subscriptions);
 
@@ -290,7 +57,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		const filePath = Executor.normalizePath(event.document.uri.fsPath);
 		console.log('onDidChangeTextDocument: ', filePath);
 		lineTracker.shift(configLoader.list, filePath, event.contentChanges, event.document);
-		updateDecos();
+		updateDecos({ configLoader });
 		lensEmitter.fire();
 	}, null, context.subscriptions);
 
@@ -310,6 +77,12 @@ export async function activate(context: vscode.ExtensionContext) {
 	const provider = new MarkerHoverProvider(configLoader);
 
 	const hoverRegistration = vscode.languages.registerHoverProvider({ pattern: '**' }, provider);
+
+	const lenses = getLensesProvider({
+		isHighlightEnabled: getIsHighlightEnabled,
+		configLoader,
+		lensEmitter
+	});
 
 	const lensRegistration = vscode.languages.registerCodeLensProvider({ pattern: '**' }, lenses);
 
@@ -552,8 +325,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
 
 	const highLight = vscode.commands.registerCommand('marker.highLight', () => {
-		isHighlightEnabled = !isHighlightEnabled;
-		updateDecos();
+		toggleHighlight();
+		updateDecos({ configLoader });
 		lensEmitter.fire();
 	});
 
@@ -623,7 +396,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(...register);
 
 	// Initial render after everything is set up
-	updateDecos();
+	updateDecos({ configLoader });
 
 }
 
@@ -646,4 +419,3 @@ const forDebug = (ctx: any, cl: any, cmd: string) => {
 	ctx.subscriptions.push(debug, statusBarItem);
 
 };
-
