@@ -77,10 +77,12 @@ export class Executor {
     }
 
     public async refresh(list: any) {
-
+        
         // refresh marker file
         if (!list) { return; }
-
+        
+        
+        console.log('we are in refresh');
         const lines: string[] = [];
         const seen = new Set<string>();
 
@@ -149,6 +151,30 @@ export class Executor {
 
         // 4. Write filtered content + new record back as one atomic write
         await writeFile(this.toMarker, filtered + '\n' + JSON.stringify(newRecord) + '\n');
+    }
+
+    public async replaceColor(list: any, colorMap: Map<string, string>) {
+        console.log('we are in replaceColor');
+        if (!list || colorMap.size === 0) {
+            return;
+        }
+        let updated = false;
+        
+        for (const [filePath, markersAtLines] of Object.entries(list)) {
+            console.log('datacheck: ', JSON.stringify([filePath, markersAtLines]));
+            for (const [lineStr, data] of Object.entries(markersAtLines as any)) {
+                console.log('datacheck: ', JSON.stringify([lineStr, data]));
+                const d = data as any;
+                if (colorMap.has(d.color)) {
+                    d.color = colorMap.get(d.color);
+                    updated = true;
+                }
+            }
+        }
+
+        if (updated) {
+            await this.refresh(list);
+        }
     }
 
 }

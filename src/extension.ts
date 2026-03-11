@@ -68,7 +68,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	const getColorPallete = userConfig.color()!;
 
 	decoration(getColorPallete);
-	const color_p = colorPalette(getColorPallete);
+
+	const color_p = () => colorPalette(getColorPallete);
 
 	console.log('Marker Loaded!');
 
@@ -166,7 +167,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 				if (options.description === 'e-color') {
 
-					const updated = await vscode.window.showQuickPick(color_p!, { placeHolder: 'Select Color' });
+					const updated = await vscode.window.showQuickPick(color_p()!, { placeHolder: 'Select Color' });
 
 					if (!updated) { return; }
 
@@ -187,7 +188,7 @@ export async function activate(context: vscode.ExtensionContext) {
 					prompt: 'Add comment'
 				});
 
-				const colorOption = await vscode.window.showQuickPick(color_p!, { placeHolder: 'Select Color' });
+				const colorOption = await vscode.window.showQuickPick(color_p()!, { placeHolder: 'Select Color' });
 
 				if (!colorOption) { return; }
 
@@ -243,7 +244,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 				if (!todo) { return; }
 
-				const colors = Config.colorLs;
+				const colors = structuredClone(Config.colorLs);
 
 				if (todo.description === 'acc') {
 					const color = await vscode.window.showInputBox({
@@ -315,7 +316,10 @@ export async function activate(context: vscode.ExtensionContext) {
 				}
 
 				// Fix: change ctt to color so it matches config.ts update signature 'payloads.color'
-				await userConfig.update('color', { path: toUserConfig, color: colors });
+				await userConfig.update('color', todo.description, { path: toUserConfig, color: colors, list: configLoader.list, exct: exct });
+
+				decoration(colors);
+				updateDecos({ configLoader });
 			}
 		});
 

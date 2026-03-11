@@ -53,17 +53,56 @@ export class Config {
         return this.configs.color;
     }
 
-    public async update(type: string, payloads: any) {
+    public async update(type: string, action: string, payloads: any) {
 
-        switch(type){
-            case 'color': 
-            const beforeChange = structuredClone(this.configs?.color);
+        switch (type) {
+            case 'color':
+                const beforeChange = structuredClone(this.configs?.color);
+
                 Config.colorLs = payloads.color;
+
+                if (this.configs) {
+                    this.configs.color = payloads.color;
+                }
+
                 const full = {
                     settings: this.configs?.settings,
                     color: Config.colorLs
                 };
+
                 await writeFile(payloads.path, JSON.stringify(full, null, 2));
+
+                if (beforeChange && payloads.list && payloads.exct) {
+                    const colorMap = new Map<string, string>();
+
+                    switch (action) {
+                        case 'acc':
+                            if (beforeChange.length < payloads.color.length) {
+
+                            }
+                            break;
+                        case 'rc':
+                            if (beforeChange.length > payloads.color.length) {
+
+                            }
+                            break;
+                        case 'ecd':
+                            for (let i = 0; i < beforeChange.length; i++) {
+                                if (beforeChange.length === payloads.color.length) {
+                                    if (beforeChange[i].hex !== payloads.color[i].hex) {
+                                        colorMap.set(beforeChange[i].hex, payloads.color[i].hex);
+                                    }
+
+                                }
+                            }
+                            break;
+                    }
+                    
+                    if (colorMap.size > 0) {
+                        await payloads.exct.replaceColor(payloads.list, colorMap);
+                    }
+                }
+
                 break;
             default:
                 break;
