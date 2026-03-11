@@ -1,62 +1,100 @@
-# 👋 Welcome to .Marker！
+<div align='center'>
 
-> 📌 **Marker** - A sticky note system for programmers. Write comments anywhere without cluttering your code!
+![](https://github.com/transpective-dev/.marker/blob/main/readme/header.png)
 
-![](https://github.com/transpective-dev/.marker/blob/main/readme/preview.png)
+</div>
 
----
+This readme is made following this structure.
 
-## 🚀 Why Use .Marker?
+- "What is .Marker?"
+- "Why we use .Marker?"
+- "How to use .Marker?"
 
-### 🧩 Core Values
+### What is .Marker?
 
-- **🌈 Group by Color** - Differentiate comment types by high-contrast highlights.
-- **📄 Cross-Language Support** - Persistent comments for any language, even JSON or plain text.
-- **🔍 Lens Mode** - Read comments via Hover or CodeLens without leaving the codebase.
-- **⚡ Zero Pollution** - Comments are stored in a separate `.marker-storage/` folder, keeping your git diffs clean.
+Marker is a cross-language commenting and markup tool
 
-### 🆚 Contrast
+to help you
 
-| Original Comments              | .Marker                    |
-| :----------------------------- | :------------------------- |
-| ✅ Quick edit                  | ✅ Integrated VS Code menu |
-| ❌ Pollute project diffs       | ✅ Transparent storage     |
-| ❌ Some languages lack support | ✅ Universal support       |
-| ❌ Visual noise                | ✅ Toggleable visibility   |
+- manage comments in one place
+- distinguish comment types at a glance without reading through them
+- use Markdown to customize your comments in any way you want
+- comment on files that don't support comments (like JSON)
 
----
+etc.
 
-## 🛠️ How to Use
+We highly recommend this to people who are
 
-### Function List
-
-- **Add/Edit**: Right-click or use `Ctrl + Alt + .` to add/edit a comment.
-- **Delete**: Remove markers via the QuickPick menu.
-- **Refresh**: Manually sync changes to disk if needed (though we handle most cases automatically).
-- **Expand**: Use `Ctrl + Alt + E` to automatically expand a marker to the nearest `{}`, `[]`, or `()` block.
-
-### ⌨️ Shortcuts
-
-| Action               | Shortcut                             |
-| :------------------- | :----------------------------------- |
-| **Add/Edit Comment** | `Ctrl + Alt + .`                     |
-| **Expand Range**     | `Ctrl + Alt + E`                     |
-| **Toggle Highlight** | Click the **Eye Icon** in status bar |
+- Vibe coders
+- Want to keep their project clean but still need comments
+- Need customized comments for specific use cases
 
 ---
 
-## 🧬 Intelligent Line Tracking (Phase 3.5 Engine)
+### Why we use .Marker?
 
-We use a high-precision boundary tracking engine (Commit `cf4eb2` Logic) to ensure your markers follow your code:
+Traditional comments are too limited.
 
-- ✅ **Automatic Drift**: Markers move down when you insert lines above them.
-- ✅ **Dynamic Expansion**: Pressing `Enter` inside a highlighted block expands the range automatically.
-- ✅ **Head/Tail Protection**: Intelligent detection of line-start insertions prevents marker "usurpation."
+They only support plain text, can't be toggled off visually, pollute your git diffs, and some file types don't support them at all.
+
+.Marker solves this by storing all annotations in a separate `.marker-storage/` folder —
+completely outside your source files. This means your code stays clean, your diffs stay readable, and your comments can be as rich as you want.
+
+If you work with JSON, YAML, or any file that blocks native comments, .Marker covers you there too.
+
+| Original Comments            | .Marker                 |
+| :--------------------------- | :---------------------- |
+| Quick to write               | Integrated VS Code menu |
+| Pollutes git diffs           | Transparent storage     |
+| Some languages lack support  | Universal support       |
+| Always visible, visual noise | Toggleable visibility   |
 
 ---
+
+### How to use .Marker?
+
+**Keyboard Shortcuts**:
+
+| Action               | Shortcut                                          |
+| :------------------- | :------------------------------------------------ |
+| **Open Options**     | `Ctrl + Alt + .` or Open from Right-click menu    |
+| **Expand Range**     | `Ctrl + Alt + E`                                  |
+| **Toggle Highlight** | Click the **Eye Icon** in the top-right of editor |
+
+**Options Menu**
+
+When you open the menu via shortcut or right-click, you'll see:
+
+| Option      | What it does                                       |
+| :---------- | :------------------------------------------------- |
+| **Add**     | Add a new comment to the current line or selection |
+| **Edit**    | Edit the content or color of an existing comment   |
+| **Delete**  | Remove the comment at the current line             |
+| **Refresh** | Manually flush and rewrite the storage file        |
+| **Config**  | Open the config file directly to edit settings     |
+| **Color**   | Add, edit, or remove colors from your palette      |
+
+**Multi-line**
+
+Select multiple lines before opening the menu. The comment will cover the entire selected range and highlight all of it.
+
+**Expand Range**
+
+If a marker already exists on your current line, pressing `Ctrl + Alt + E` will automatically detect the nearest enclosing block (`{}`, `[]`, `()`) and expand the range to cover it.
+
+---
+
+### In the last
 
 ## 🤝 Community
 
 Feedback and bug reports are highly welcome! This project belongs to everyone who wants a cleaner coding experience.
 
 **Made with ❤️ by the Marker Community and transpective dev team**
+
+
+### Note
+
+we will add webview panel soon.
+
+through the webview, we could do more things!

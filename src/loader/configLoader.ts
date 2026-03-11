@@ -10,6 +10,7 @@ export interface MarkerData {
     range: MarkerRange;
     content: string;
     color: string;
+    alt: string;
 }
 
 export type note_ls = {
@@ -20,7 +21,7 @@ export type note_ls = {
 
 
 import * as vscode from 'vscode';
-import { executor } from '../executor';
+import { Executor } from '../executor';
 
 export class configloader {
 
@@ -39,6 +40,11 @@ export class configloader {
     // Plan D: debounce timer - only reload after 300ms of silence
     private debounceTimer: NodeJS.Timeout | null = null;
 
+    public reload = () => {
+        if (this.debounceTimer) { clearTimeout(this.debounceTimer); }
+        this.debounceTimer = setTimeout(() => this.loadData(), 300);
+    };
+
     constructor(path: string) {
 
         this.watcher = vscode.workspace.createFileSystemWatcher(
@@ -50,28 +56,20 @@ export class configloader {
 
         this.path = path;
         // initialize
-        this.loadConfig();
+        this.loadData();
         console.log(this.path);
 
-        // Add FileSystemWatcher for hot-reloading (with debounce)
-        const reload = () => {
-            if (this.debounceTimer) { clearTimeout(this.debounceTimer); }
-            this.debounceTimer = setTimeout(() => this.loadConfig(), 300);
-        };
-
-        this.watcher.onDidChange(reload);
-        this.watcher.onDidCreate(reload);
-        this.watcher.onDidDelete(reload);
+        this.watcher.onDidChange(this.reload);
+        this.watcher.onDidCreate(this.reload);
+        this.watcher.onDidDelete(this.reload);
     }
 
-    public async loadConfig() {
+    public async loadData() {
 
         try {
             console.log('reading files...');
 
-            const ls: string[] = await readdir(this.path);
-
-            const newPath = join(this.path, ls[0]);
+            const newPath = join(this.path, '.marker.jsonl');
 
             console.log(newPath);
 
@@ -94,7 +92,7 @@ export class configloader {
 
             for (const item of i) {
 
-                const refinePath = executor.normalizePath(item.path);
+                const refinePath = Executor.normalizePath(item.path);
 
                 // Plan B: store as nested key map instead of array
                 if (!this.list[refinePath]) {
@@ -108,7 +106,8 @@ export class configloader {
                 const markerData: MarkerData = {
                     range: { start: rStart, end: rEnd },
                     content: item.content,
-                    color: item.color ? item.color : '#ffffff90'
+                    color: item.color ? item.color : '#00000000',
+                    alt: item.alt ? item.alt : ''
                 };
 
                 // Map ALL lines within the range to point to the exact same memory object
@@ -124,7 +123,7 @@ export class configloader {
             this.onUpdateCallback?.();
 
         } catch (error) {
-            console.error('Marker MVP try-catch caught an error during loadConfig:', error);
+            console.error('Marker MVP try-catch caught an error during loadData:', error);
         }
 
     }
@@ -132,7 +131,7 @@ export class configloader {
     // get content from jsonl
     public get(path: string, line: { start: number, end?: number }) {
 
-        path = executor.normalizePath(path);
+        path = Executor.normalizePath(path);
 
         // Find if line exists in the file's marker list
         if (!this.list[path]) {

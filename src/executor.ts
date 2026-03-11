@@ -11,9 +11,10 @@ export interface MarkerAnnotation {
     path: string;
     color: string;
     content: string;
+    alt: string;
 }
 
-export class executor {
+export class Executor {
 
     private toMarker: string = '';
 
@@ -41,19 +42,19 @@ export class executor {
 
     public static formatEnchance = (content: string) => {
         let result = content;
-        executor.mdChangeLs.forEach((value, key) => {
+        Executor.mdChangeLs.forEach((value, key) => {
             // Using a simple split/join for better performance on large strings
             result = result.split(key).join(value);
         });
         return result;
-    }
+    };
 
     constructor(path: string) {
         this.toMarker = path;
 
-        executor.mdChangeLs.set('\\n', '\n\n');    // User input \n becomes Markdown newline
-        executor.mdChangeLs.set('\\t', '    ');   // Tabs to 4 spaces
-        executor.mdChangeLs.set('---', '  \n\n---\n\n'); // Horizontal rule
+        Executor.mdChangeLs.set('\\n', '\n\n');    // User input \n becomes Markdown newline
+        Executor.mdChangeLs.set('\\t', '    ');   // Tabs to 4 spaces
+        Executor.mdChangeLs.set('---', '  \n\n---\n\n'); // Horizontal rule
 
     }
 
@@ -66,7 +67,8 @@ export class executor {
             range: { start: ctt.range.start, end: ctt.range.end },
             path: normalizedPath,
             color: ctt.color,
-            content: ctt.content
+            content: ctt.content,
+            alt: ctt.alt
         };
 
         // NDJSON: one JSON object per line, appended directly
@@ -75,10 +77,12 @@ export class executor {
     }
 
     public async refresh(list: any) {
-
+        
         // refresh marker file
         if (!list) { return; }
-
+        
+        
+        console.log('we are in refresh');
         const lines: string[] = [];
         const seen = new Set<string>();
 
@@ -97,7 +101,8 @@ export class executor {
                         range: { start: d.range.start, end: d.range.end },
                         path: filePath,
                         color: d.color,
-                        content: d.content
+                        content: d.content,
+                        alt: d.alt ? d.alt : ''
                     };
                     lines.push(JSON.stringify(record));
                 }
@@ -140,11 +145,36 @@ export class executor {
             range: { start: ctt.range.start, end: ctt.range.end },
             path: ctt.path,
             color: ctt.color,
-            content: ctt.content
+            content: ctt.content,
+            alt: ctt.alt
         };
 
         // 4. Write filtered content + new record back as one atomic write
         await writeFile(this.toMarker, filtered + '\n' + JSON.stringify(newRecord) + '\n');
+    }
+
+    public async replaceColor(list: any, colorMap: Map<string, string>) {
+        console.log('we are in replaceColor');
+        if (!list || colorMap.size === 0) {
+            return;
+        }
+        let updated = false;
+        
+        for (const [filePath, markersAtLines] of Object.entries(list)) {
+            console.log('datacheck: ', JSON.stringify([filePath, markersAtLines]));
+            for (const [lineStr, data] of Object.entries(markersAtLines as any)) {
+                console.log('datacheck: ', JSON.stringify([lineStr, data]));
+                const d = data as any;
+                if (colorMap.has(d.color)) {
+                    d.color = colorMap.get(d.color);
+                    updated = true;
+                }
+            }
+        }
+
+        if (updated) {
+            await this.refresh(list);
+        }
     }
 
 }
