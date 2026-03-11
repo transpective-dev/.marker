@@ -29,6 +29,10 @@ We highly recommend this to people who are
 - Want to keep their project clean but still need comments
 - Need customized comments for specific use cases
 
+
+preview:
+![](https://github.com/transpective-dev/.marker/blob/main/readme/preview.png)
+
 ---
 
 ### Why we use .Marker?
