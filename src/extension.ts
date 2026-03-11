@@ -10,7 +10,6 @@ import { configloader } from './loader/configLoader';
 import { Executor, lineTracker } from './executor';
 import { findEnclosingBlock } from './engine/blockExpander';
 import { Config } from './toolbox/config';
-import type { color } from './toolbox/config';
 
 let configLoader: configloader;
 
@@ -18,6 +17,21 @@ let workspacePath: string;
 export let toMarkerPath: string;
 export let toUserConfig: string;
 export let exct: Executor;
+
+const updateHL = (i: string) => {
+	switch (i) {
+			case 'text':
+				lensEmitter.fire();
+				break;
+			case 'HL':
+				updateDecos({ configLoader });
+				break;
+			case 'text/HL':
+				updateDecos({ configLoader });
+				lensEmitter.fire();
+				break;
+		}
+}
 
 // lens emitter
 export const lensEmitter = new vscode.EventEmitter<void>();
@@ -43,12 +57,13 @@ export async function activate(context: vscode.ExtensionContext) {
 	// 2. Initialize Core Logic
 	configLoader = new configloader(workspacePath);
 	exct = new Executor(toMarkerPath);
+	const userConfig = new Config(toUserConfig);
 
 	// Sync: when marker data changes, re-draw highlights
-	configLoader.setOnUpdate(() => { updateDecos({ configLoader }); });
+	configLoader.setOnUpdate(() => { updateHL(userConfig.high_light_status); });
 
 	// Sync: when user switches file tab, re-draw for new file
-	vscode.window.onDidChangeActiveTextEditor(() => { updateDecos({ configLoader }); }, null, context.subscriptions);
+	vscode.window.onDidChangeActiveTextEditor(() => { updateHL(userConfig.high_light_status); }, null, context.subscriptions);
 
 	vscode.workspace.onDidCloseTextDocument(() => { exct.refresh(configLoader.list); }, null, context.subscriptions);
 
@@ -57,13 +72,12 @@ export async function activate(context: vscode.ExtensionContext) {
 		const filePath = Executor.normalizePath(event.document.uri.fsPath);
 		console.log('onDidChangeTextDocument: ', filePath);
 		lineTracker.shift(configLoader.list, filePath, event.contentChanges, event.document);
-		updateDecos({ configLoader });
-		lensEmitter.fire();
+
+		updateHL(userConfig.high_light_status);
+
 	}, null, context.subscriptions);
 
 	await initializeFile(workspacePath);
-
-	const userConfig = new Config(toUserConfig);
 
 	const getColorPallete = userConfig.color()!;
 
@@ -82,7 +96,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	const lenses = getLensesProvider({
 		isHighlightEnabled: getIsHighlightEnabled,
 		configLoader,
-		lensEmitter
+		lensEmitter,
 	});
 
 	const lensRegistration = vscode.languages.registerCodeLensProvider({ pattern: '**' }, lenses);
@@ -329,9 +343,11 @@ export async function activate(context: vscode.ExtensionContext) {
 
 
 	const highLight = vscode.commands.registerCommand('marker.highLight', () => {
+
 		toggleHighlight();
-		updateDecos({ configLoader });
-		lensEmitter.fire();
+
+		updateHL(userConfig.high_light_status);
+
 	});
 
 	// --- marker.expandRange ---

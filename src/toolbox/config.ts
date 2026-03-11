@@ -3,7 +3,7 @@ import { writeFile } from 'fs/promises';
 
 interface configs {
     settings: {
-        high_light_status: string;
+        high_light_status: 'text' | 'HL' | 'text/HL';
     };
     color: color[]
 }
@@ -23,7 +23,7 @@ const DEFAULT_COLORS: color[] = [
 
 export class Config {
 
-    private configs: configs | null = null;
+    public static configs: configs | null = null;
 
     constructor(path: string) {
         this.initialize(path);
@@ -35,7 +35,7 @@ export class Config {
         try {
             if (existsSync(path)) {
                 const raw = readFileSync(path, 'utf-8');
-                this.configs = JSON.parse(raw);
+                Config.configs = JSON.parse(raw);
             }
         } catch (e) {
             console.error('.Marker: Failed to read config', e);
@@ -44,29 +44,29 @@ export class Config {
 
     public color(): color[] {
         // Fallback to default colors if empty or undefined
-        if (!this.configs || !this.configs.color || this.configs.color.length === 0) {
+        if (!Config.configs || !Config.configs.color || Config.configs.color.length === 0) {
             return DEFAULT_COLORS;
         }
 
-        Config.colorLs = this.configs.color ? this.configs.color : DEFAULT_COLORS;
+        Config.colorLs = Config.configs.color ? Config.configs.color : DEFAULT_COLORS;
 
-        return this.configs.color;
+        return Config.configs.color;
     }
 
     public async update(type: string, action: string, payloads: any) {
 
         switch (type) {
             case 'color':
-                const beforeChange = structuredClone(this.configs?.color);
+                const beforeChange = structuredClone(Config.configs?.color);
 
                 Config.colorLs = payloads.color;
 
-                if (this.configs) {
-                    this.configs.color = payloads.color;
+                if (Config.configs) {
+                    Config.configs.color = payloads.color;
                 }
 
                 const full = {
-                    settings: this.configs?.settings,
+                    settings: Config.configs?.settings,
                     color: Config.colorLs
                 };
 
@@ -97,7 +97,7 @@ export class Config {
                             }
                             break;
                     }
-                    
+
                     if (colorMap.size > 0) {
                         await payloads.exct.replaceColor(payloads.list, colorMap);
                     }
@@ -108,6 +108,10 @@ export class Config {
                 break;
         }
 
+    }
+
+    public get high_light_status(): 'text' | 'HL' | 'text/HL' {
+        return Config.configs?.settings.high_light_status || 'text/HL';
     }
 
     private async updateSettings(payload: any) {
