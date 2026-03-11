@@ -20,8 +20,8 @@
   "contributes": {
     "commands": [
       {
-        "command": "marker.addComment",
-        "title": ".Marker: Add Comment"
+        "command": "marker.options",
+        "title": ".Marker: Options"
       },
       {
         "command": "marker.highLight",
@@ -36,7 +36,7 @@
     "menus": {
       "editor/context": [
         {
-          "command": "marker.addComment",
+          "command": "marker.options",
           "when": "editorTextFocus",
           "group": "navigation@1"
         }
@@ -51,7 +51,7 @@
     },
     "keybindings": [
       {
-        "command": "marker.addComment",
+        "command": "marker.options",
         "key": "ctrl+alt+.",
         "mac": "cmd+alt+.",
         "when": "editorTextFocus"

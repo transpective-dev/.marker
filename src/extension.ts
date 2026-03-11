@@ -20,17 +20,17 @@ export let exct: Executor;
 
 const updateHL = (i: string) => {
 	switch (i) {
-			case 'text':
-				lensEmitter.fire();
-				break;
-			case 'HL':
-				updateDecos({ configLoader });
-				break;
-			case 'text/HL':
-				updateDecos({ configLoader });
-				lensEmitter.fire();
-				break;
-		}
+		case 'text':
+			lensEmitter.fire();
+			break;
+		case 'HL':
+			updateDecos({ configLoader });
+			break;
+		case 'text/HL':
+			updateDecos({ configLoader });
+			lensEmitter.fire();
+			break;
+	}
 }
 
 // lens emitter
@@ -79,11 +79,9 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	await initializeFile(workspacePath);
 
-	const getColorPallete = userConfig.color()!;
+	decoration(userConfig.color()!);
 
-	decoration(getColorPallete);
-
-	const color_p = () => colorPalette(getColorPallete);
+	const color_p = () => colorPalette(userConfig.color()!);
 
 	console.log('Marker Loaded!');
 
@@ -97,11 +95,12 @@ export async function activate(context: vscode.ExtensionContext) {
 		isHighlightEnabled: getIsHighlightEnabled,
 		configLoader,
 		lensEmitter,
+		getShowStatus: () => userConfig.high_light_status
 	});
 
 	const lensRegistration = vscode.languages.registerCodeLensProvider({ pattern: '**' }, lenses);
 
-	const addComment = vscode.commands.registerCommand('marker.addComment', async () => {
+	const options = vscode.commands.registerCommand('marker.options', async () => {
 
 		const editor = vscode.window.activeTextEditor;
 
@@ -408,7 +407,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		hoverRegistration,
 		lensRegistration,
 		configLoader.watcher,
-		addComment,
+		options,
 		highLight,
 		expandRange
 	];
