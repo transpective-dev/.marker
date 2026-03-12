@@ -11,6 +11,15 @@ export interface MarkerData {
     content: string;
     color: string;
     alt: string;
+    id: string;
+    gui: {
+        description: string;
+        relation: {
+            a: string;
+            b: string;
+            comment: string;
+        }[]
+    };
 }
 
 export type note_ls = {
@@ -92,6 +101,15 @@ export class configloader {
                 delete this.list[key];
             }
 
+            const generateId = () => {
+                const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+                let result = '';
+                for (let i = 0; i < 6; i++) {
+                    result += chars.charAt(Math.floor(Math.random() * chars.length));
+                }
+                return result;
+            };
+
             for (const item of i) {
 
                 const refinePath = Executor.normalizePath(item.path);
@@ -109,7 +127,12 @@ export class configloader {
                     range: { start: rStart, end: rEnd },
                     content: item.content,
                     color: item.color ? item.color : '#00000000',
-                    alt: item.alt ? item.alt : ''
+                    alt: item.alt ? item.alt : '',
+                    id: item.id ? item.id : generateId(),
+                    gui: item.gui ? item.gui : {
+                        description: '',
+                        relation: []
+                    }
                 };
 
                 // Map ALL lines within the range to point to the exact same memory object

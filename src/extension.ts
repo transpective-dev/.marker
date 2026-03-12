@@ -12,8 +12,8 @@ import { findEnclosingBlock } from './engine/blockExpander';
 import { Config } from './toolbox/config';
 
 let configLoader: configloader;
-
 let workspacePath: string;
+let rootPath: string;
 export let toMarkerPath: string;
 export let toUserConfig: string;
 export let exct: Executor;
@@ -31,7 +31,7 @@ const updateHL = (i: string) => {
 			lensEmitter.fire();
 			break;
 	}
-}
+};
 
 // lens emitter
 export const lensEmitter = new vscode.EventEmitter<void>();
@@ -49,7 +49,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		return;
 	}
 
-	const rootPath = folders[0].uri.fsPath;
+	rootPath = folders[0].uri.fsPath;
 	workspacePath = join(rootPath, '.marker-storage');
 	toMarkerPath = join(workspacePath, '.marker.jsonl');
 	toUserConfig = join(workspacePath, 'config.json');
@@ -115,6 +115,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		};
 
 		// Check if there is already a comment on the current line (for 'Edit' option)
+		console.log('currentPath: ', currentPath);
 		const existing = configLoader.get(currentPath, currentLine);
 
 		const qp = vscode.window.createQuickPick();
@@ -125,6 +126,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		const items = [existing ? quick_p.items.edit : quick_p.items.add];
 
 		const lsItems = [
+			quick_p.items.jump,
 			quick_p.items.refresh,
 			quick_p.items.delete,
 			quick_p.items.config,
@@ -142,6 +144,44 @@ export async function activate(context: vscode.ExtensionContext) {
 			qp.hide();
 
 			if (!selected) { return; }
+
+			if (selected.label === 'Jump') {
+				// global jump menu
+				const uniqueMarkers = new Map<string, any>();
+				for (const filePath in configLoader.list) {
+					for (const line in configLoader.list[filePath]) {
+						const marker = configLoader.list[filePath][line];
+						// deduplicate by object reference or id
+						uniqueMarkers.set(marker.id, { marker, path: filePath });
+					}
+				}
+
+				const jumpOptions: vscode.QuickPickItem[] = [];
+
+				uniqueMarkers.forEach((entry) => {
+					const { marker, path } = entry;
+					const labelBase = marker.alt ? marker.alt : marker.content;
+					const truncatedLabel = labelBase.length > 20 ? labelBase.substring(0, 20) + '...' : labelBase;
+
+					jumpOptions.push({
+						label: truncatedLabel,
+						description: '',
+						detail: `${marker.range.start}::${marker.range.end}   ${path}   ${marker.id}`
+					});
+				});
+
+				const chosen = await vscode.window.showQuickPick(jumpOptions, { placeHolder: 'Search by ID or Path', matchOnDetail: true });
+
+				if (chosen) {
+					// parse path and range from detail. detail format: start::end   path   id
+					const parts = chosen.detail!.split('   ');
+					const rangeStr = parts[0];
+					const outPath = parts[1];
+					const rangeParts = rangeStr.split('::');
+					await exct.jumpToLine(vscode.Uri.file(join(rootPath, outPath)).fsPath, { start: parseInt(rangeParts[0]), end: parseInt(rangeParts[1]) });
+				}
+				return;
+			}
 
 			if (selected.label === 'Edit' && existing) {
 				// --- EDIT MODE: prefill and call recover ---
@@ -173,7 +213,9 @@ export async function activate(context: vscode.ExtensionContext) {
 						path: currentPath,
 						color: existing.color,
 						content: updated,
-						alt: existing.alt
+						alt: existing.alt,
+						id: existing.id,
+						gui: existing.gui
 					});
 
 				}
@@ -189,7 +231,9 @@ export async function activate(context: vscode.ExtensionContext) {
 						path: currentPath,
 						color: updated.description,
 						content: existing.content,
-						alt: existing.alt
+						alt: existing.alt,
+						id: existing.id,
+						gui: existing.gui
 					});
 
 				}
@@ -211,12 +255,26 @@ export async function activate(context: vscode.ExtensionContext) {
 					prompt: 'Add alt text for highlight'
 				});
 
+				const generateId = () => {
+					const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+					let result = '';
+					for (let i = 0; i < 6; i++) {
+						result += chars.charAt(Math.floor(Math.random() * chars.length));
+					}
+					return result;
+				};
+
 				await exct.writeIntoMarker(toMarkerPath, {
 					range: { start: currentLine.start, end: currentLine.end },
 					path: currentPath,
 					color: colorOption.description!,
 					content: content,
-					alt: alt ?? ''
+					alt: alt ?? '',
+					id: generateId(),
+					gui: {
+						description: '',
+						relation: []
+					}
 				});
 			} else if (selected.label === 'Refresh') {
 
@@ -265,7 +323,7 @@ export async function activate(context: vscode.ExtensionContext) {
 							}
 						], { placeHolder: 'Select Highlight Mode' });
 
-						if (!i) return;
+						if (!i) { return; }
 
 						await userConfig.update('settings', 'chs', { path: toUserConfig, status: i.label });
 						updateHL(userConfig.high_light_status);
@@ -433,7 +491,9 @@ export async function activate(context: vscode.ExtensionContext) {
 			path: currentPath,
 			color: existing.color,
 			content: existing.content,
-			alt: existing.alt
+			alt: existing.alt,
+			id: existing.id,
+			gui: existing.gui
 		});
 
 		vscode.window.showInformationMessage(`.Marker: Expanded to lines ${newStart} - ${newEnd}`);

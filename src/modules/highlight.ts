@@ -43,7 +43,7 @@ export const decoration = (palette: color[]) => {
         const hex = item.hex;
         decorationTypes.set(hex, vscode.window.createTextEditorDecorationType({
             isWholeLine: true,
-            backgroundColor: hex + '10',
+            backgroundColor: hex + '15',
             borderStyle: 'solid',
             borderWidth: '0 0 0 3px',
             borderColor: hex,

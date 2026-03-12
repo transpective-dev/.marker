@@ -7,11 +7,20 @@ export interface MarkerRange {
 }
 
 export interface MarkerAnnotation {
+    id: string;
     range: MarkerRange;
     path: string;
     color: string;
     content: string;
     alt: string;
+    gui: {
+        description: string;
+        relation: {
+            a: string;
+            b: string;
+            comment: string;
+        }[]
+    };
 }
 
 export class Executor {
@@ -32,7 +41,7 @@ export class Executor {
             // Get relative path and normalize slashes
             let i = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
 
-            const cleaned = i.replace(/^[\.\/]+/, '');
+            const cleaned = i.replace(/^\.\//, '');
 
             return './' + cleaned;
         } catch {
@@ -64,11 +73,13 @@ export class Executor {
         const normalizedPath = ctt.path;
 
         const record = {
+            id: ctt.id,
             range: { start: ctt.range.start, end: ctt.range.end },
             path: normalizedPath,
             color: ctt.color,
             content: ctt.content,
-            alt: ctt.alt
+            alt: ctt.alt,
+            gui: ctt.gui
         };
 
         // NDJSON: one JSON object per line, appended directly
@@ -77,10 +88,10 @@ export class Executor {
     }
 
     public async refresh(list: any) {
-        
+
         // refresh marker file
         if (!list) { return; }
-        
+
         console.log('we are in refresh');
 
         const lines: string[] = [];
@@ -98,11 +109,13 @@ export class Executor {
                     seen.add(uniqueKey);
 
                     const record = {
+                        id: d.id,
                         range: { start: d.range.start, end: d.range.end },
                         path: filePath,
                         color: d.color,
                         content: d.content,
-                        alt: d.alt ? d.alt : ''
+                        alt: d.alt ? d.alt : '',
+                        gui: d.gui
                     };
                     lines.push(JSON.stringify(record));
                 }
@@ -142,11 +155,13 @@ export class Executor {
 
         // 3. Build the updated record
         const newRecord = {
+            id: ctt.id,
             range: { start: ctt.range.start, end: ctt.range.end },
             path: ctt.path,
             color: ctt.color,
             content: ctt.content,
-            alt: ctt.alt
+            alt: ctt.alt,
+            gui: ctt.gui
         };
 
         // 4. Write filtered content + new record back as one atomic write
@@ -159,7 +174,7 @@ export class Executor {
             return;
         }
         let updated = false;
-        
+
         for (const [filePath, markersAtLines] of Object.entries(list)) {
             console.log('datacheck: ', JSON.stringify([filePath, markersAtLines]));
             for (const [lineStr, data] of Object.entries(markersAtLines as any)) {
@@ -179,20 +194,20 @@ export class Executor {
 
     public async jumpToLine(filePath: string, range: { start: number, end: number }) {
 
-    const uri = vscode.Uri.file(filePath);
+        const uri = vscode.Uri.file(filePath);
 
-    const doc = await vscode.workspace.openTextDocument(uri);
+        const doc = await vscode.workspace.openTextDocument(uri);
 
-    // change linecount to index
-    const posStart = new vscode.Position(range.start - 1, 0);
-    const posEnd = new vscode.Position(range.end - 1, 0);
-    
-    await vscode.window.showTextDocument(doc, {
-        selection: new vscode.Range(posStart, posEnd), 
-        preview: false,                       
-        viewColumn: vscode.ViewColumn.One    
-    });
-} 
+        // change linecount to index
+        const posStart = new vscode.Position(range.start - 1, 0);
+        const posEnd = new vscode.Position(range.end - 1, 0);
+
+        await vscode.window.showTextDocument(doc, {
+            selection: new vscode.Range(posStart, posEnd),
+            preview: false,
+            viewColumn: vscode.ViewColumn.One
+        });
+    }
 
 }
 
