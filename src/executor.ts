@@ -177,6 +177,23 @@ export class Executor {
         }
     }
 
+    public async jumpToLine(filePath: string, range: { start: number, end: number }) {
+
+    const uri = vscode.Uri.file(filePath);
+
+    const doc = await vscode.workspace.openTextDocument(uri);
+
+    // change linecount to index
+    const posStart = new vscode.Position(range.start - 1, 0);
+    const posEnd = new vscode.Position(range.end - 1, 0);
+    
+    await vscode.window.showTextDocument(doc, {
+        selection: new vscode.Range(posStart, posEnd), 
+        preview: false,                       
+        viewColumn: vscode.ViewColumn.One    
+    });
+} 
+
 }
 
 /**

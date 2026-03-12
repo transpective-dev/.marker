@@ -32,6 +32,10 @@ export class QuickPick {
             label: 'Config',
             description: 'Edit config'
         },
+        jump: {
+            label: 'Jump',
+            description: 'Jump to Comment'
+        }
     };
     
     public takeAction (action: string, target1?: string, target2?: string) {
