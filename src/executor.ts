@@ -7,11 +7,20 @@ export interface MarkerRange {
 }
 
 export interface MarkerAnnotation {
+    id: string;
     range: MarkerRange;
     path: string;
     color: string;
     content: string;
     alt: string;
+    gui: {
+        description: string;
+        relation: {
+            a: string;
+            b: string;
+            comment: string;
+        }[]
+    };
 }
 
 export class Executor {
@@ -32,7 +41,7 @@ export class Executor {
             // Get relative path and normalize slashes
             let i = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
 
-            const cleaned = i.replace(/^[\.\/]+/, '');
+            const cleaned = i.replace(/^(\.\/|\/)+/, '');
 
             return './' + cleaned;
         } catch {
@@ -64,11 +73,13 @@ export class Executor {
         const normalizedPath = ctt.path;
 
         const record = {
+            id: ctt.id,
             range: { start: ctt.range.start, end: ctt.range.end },
             path: normalizedPath,
             color: ctt.color,
             content: ctt.content,
-            alt: ctt.alt
+            alt: ctt.alt,
+            gui: ctt.gui
         };
 
         // NDJSON: one JSON object per line, appended directly
@@ -77,34 +88,35 @@ export class Executor {
     }
 
     public async refresh(list: any) {
-        
+
         // refresh marker file
         if (!list) { return; }
-        
-        
+
         console.log('we are in refresh');
+
         const lines: string[] = [];
         const seen = new Set<string>();
 
-        // Traverse the nested dict: list[path][line] = MarkerData
+        // Traverse the nested dict: list[path][line] = MarkerData[]
         for (const [filePath, markersAtLines] of Object.entries(list)) {
-            for (const [lineStr, data] of Object.entries(markersAtLines as any)) {
+            for (const [lineStr, slot] of Object.entries(markersAtLines as any)) {
+                const slotArr = Array.isArray(slot) ? slot : [slot];
+                for (const d of slotArr) {
+                    // Deduplicate by id (since 1 MarkerData maps to N lines)
+                    if (!seen.has(d.id)) {
+                        seen.add(d.id);
 
-                const d = data as any;
-                const uniqueKey = `${filePath}:${d.range.start}-${d.range.end}-${d.color}-${d.content}`;
-
-                // Deduplicate mapping (since 1 MarkerData can map to N lines)
-                if (!seen.has(uniqueKey)) {
-                    seen.add(uniqueKey);
-
-                    const record = {
-                        range: { start: d.range.start, end: d.range.end },
-                        path: filePath,
-                        color: d.color,
-                        content: d.content,
-                        alt: d.alt ? d.alt : ''
-                    };
-                    lines.push(JSON.stringify(record));
+                        const record = {
+                            id: d.id,
+                            range: { start: d.range.start, end: d.range.end },
+                            path: filePath,
+                            color: d.color,
+                            content: d.content,
+                            alt: d.alt ? d.alt : '',
+                            gui: d.gui
+                        };
+                        lines.push(JSON.stringify(record));
+                    }
                 }
             }
         }
@@ -142,11 +154,13 @@ export class Executor {
 
         // 3. Build the updated record
         const newRecord = {
+            id: ctt.id,
             range: { start: ctt.range.start, end: ctt.range.end },
             path: ctt.path,
             color: ctt.color,
             content: ctt.content,
-            alt: ctt.alt
+            alt: ctt.alt,
+            gui: ctt.gui
         };
 
         // 4. Write filtered content + new record back as one atomic write
@@ -159,15 +173,15 @@ export class Executor {
             return;
         }
         let updated = false;
-        
+
         for (const [filePath, markersAtLines] of Object.entries(list)) {
-            console.log('datacheck: ', JSON.stringify([filePath, markersAtLines]));
-            for (const [lineStr, data] of Object.entries(markersAtLines as any)) {
-                console.log('datacheck: ', JSON.stringify([lineStr, data]));
-                const d = data as any;
-                if (colorMap.has(d.color)) {
-                    d.color = colorMap.get(d.color);
-                    updated = true;
+            for (const [lineStr, slot] of Object.entries(markersAtLines as any)) {
+                const slotArr = Array.isArray(slot) ? slot : [slot];
+                for (const d of slotArr) {
+                    if (colorMap.has(d.color)) {
+                        d.color = colorMap.get(d.color);
+                        updated = true;
+                    }
                 }
             }
         }
@@ -175,6 +189,23 @@ export class Executor {
         if (updated) {
             await this.refresh(list);
         }
+    }
+
+    public async jumpToLine(filePath: string, range: { start: number, end: number }) {
+
+        const uri = vscode.Uri.file(filePath);
+
+        const doc = await vscode.workspace.openTextDocument(uri);
+
+        // change linecount to index
+        const posStart = new vscode.Position(range.start - 1, 0);
+        const posEnd = new vscode.Position(range.end - 1, 0);
+
+        await vscode.window.showTextDocument(doc, {
+            selection: new vscode.Range(posStart, posEnd),
+            preview: false,
+            viewColumn: vscode.ViewColumn.One
+        });
     }
 
 }
@@ -190,7 +221,7 @@ export class lineTracker {
      * It shifts all marker line numbers for the affected file.
      */
     public static shift(
-        list: { [filepath: string]: { [line: number]: { content: string; color: string } } },
+        list: { [filepath: string]: { [line: number]: any } },
         filePath: string,
         changes: readonly { range: { start: { line: number; character: number }; end: { line: number } }; text: string }[],
         document: vscode.TextDocument
@@ -210,10 +241,18 @@ export class lineTracker {
 
             if (delta === 0) { continue; }
 
-            // 1. Extract unique markers (prevents reference/fusion bugs instantly)
-            const uniqueMarkers = new Set<any>();
+            // 1. Extract unique markers from array slots (prevents reference/fusion bugs)
+            const seenIds = new Set<string>();
+            const uniqueMarkers: any[] = [];
             for (const lineStr in currentMarkers) {
-                uniqueMarkers.add(currentMarkers[lineStr]);
+                const slot = currentMarkers[lineStr];
+                const slotArr = Array.isArray(slot) ? slot : [slot];
+                for (const m of slotArr) {
+                    if (!seenIds.has(m.id)) {
+                        seenIds.add(m.id);
+                        uniqueMarkers.push(m);
+                    }
+                }
             }
 
             const updated: any = {};
@@ -248,9 +287,6 @@ export class lineTracker {
                         marker.range.start += delta;
                     }
 
-                    // Expansion Logic:
-                    // 1. Inside (not the last line)
-                    // 2. On last line AND char < virtualOriginalLength (it was a split)
                     const isInside = startLine < marker.range.end;
                     const isSplit = startLine === marker.range.end && char < virtualOriginalLength;
 
@@ -259,21 +295,21 @@ export class lineTracker {
                     }
                 }
 
-                // 4. Safe Bounds Check (prevents negative index crashes)
+                // 4. Safe Bounds Check
                 if (marker.range.start < 1) {
                     marker.range.start = 1;
                 }
 
-                // 5. Build the new map
-                // Only write it back if it hasn't been completely collapsed/deleted
+                // 5. Build the new map with array slots
                 if (marker.range.end >= marker.range.start) {
                     for (let l = marker.range.start; l <= marker.range.end; l++) {
-                        updated[l] = marker;
+                        if (!updated[l]) { updated[l] = []; }
+                        updated[l].push(marker);
                     }
                 }
             }
 
-            // Assign back the newly built snapshot to currentMarkers so the next loop has fresh data
+            // Assign back the newly built snapshot to currentMarkers
             currentMarkers = updated;
             list[filePath] = updated;
         }

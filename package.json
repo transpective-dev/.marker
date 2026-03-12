@@ -2,7 +2,7 @@
   "name": "transpective-marker",
   "displayName": ".Marker",
   "description": "A sticky note for programmers",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "publisher": "Transpective-Dev-Team",
   "engines": {
     "vscode": "^1.100.0"

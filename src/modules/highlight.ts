@@ -43,7 +43,7 @@ export const decoration = (palette: color[]) => {
         const hex = item.hex;
         decorationTypes.set(hex, vscode.window.createTextEditorDecorationType({
             isWholeLine: true,
-            backgroundColor: hex + '35',
+            backgroundColor: hex + '15',
             borderStyle: 'solid',
             borderWidth: '0 0 0 3px',
             borderColor: hex,
@@ -81,29 +81,30 @@ export function updateDecos(payload: { configLoader: configloader }) {
     if (!getList) return;
 
     const colorGroups = new Map<string, vscode.Range[]>();
-    const seenRanges = new Set<string>();
+    const seenIds = new Set<string>();
 
     for (const lineStr in getList) {
-        const marker = getList[lineStr];
-        const color = marker.color;
+        const slot = getList[lineStr];
+        const slotArr = Array.isArray(slot) ? slot : [slot];
 
-        // Deduplicate: each unique multi-line block should only be pushed ONCE
-        // Otherwise, VS Code will layer them, making the background look too thick.
-        const uniqueKey = `${marker.range.start}-${marker.range.end}-${color}-${marker.content}`;
-        if (seenRanges.has(uniqueKey)) { continue; }
-        seenRanges.add(uniqueKey);
+        // render ALL markers in the slot (each with their own color)
+        for (const marker of slotArr) {
+            // Deduplicate by id to avoid double-painting same marker across multiple line keys
+            if (seenIds.has(marker.id)) { continue; }
+            seenIds.add(marker.id);
 
-        if (!colorGroups.has(color)) {
-            colorGroups.set(color, []);
-        };
+            const color = marker.color;
 
-        // VS Code Range is 0-indexed.
-        // Since isWholeLine: true is set in the decoration type, 
-        // any character index (0 to 0) will cover the entire line.
-        colorGroups.get(color)!.push(new vscode.Range(
-            marker.range.start - 1, 0,
-            marker.range.end - 1, 0
-        ));
+            if (!colorGroups.has(color)) {
+                colorGroups.set(color, []);
+            }
+
+            // VS Code Range is 0-indexed.
+            colorGroups.get(color)!.push(new vscode.Range(
+                marker.range.start - 1, 0,
+                marker.range.end - 1, 0
+            ));
+        }
     }
 
     // map order: [value, key, map]
