@@ -116,14 +116,24 @@ export async function activate(context: vscode.ExtensionContext) {
 
 		// Check if there is already a comment on the current line (for 'Edit' option)
 		console.log('currentPath: ', currentPath);
-		const existing = configLoader.get(currentPath, currentLine);
 
-		const qp = vscode.window.createQuickPick();
+		// Get all markers overlapping the current selection (hierarchy-aware)
+		const allAtLine = configLoader.getAll(currentPath, currentLine);
+		const existing = allAtLine[0]; // top-priority (narrowest range)
 
-		qp.placeholder = 'Select Option';
+		// --- Decide which items to show ---
+		// Rule: if existing AND its range span > 2, show BOTH Add and Edit
+		const rangeSpan = existing ? (existing.range.end - existing.range.start) : 0;
+		const showBoth = existing && rangeSpan > 2;
 
-		// Build the static option list
-		const items = [existing ? quick_p.items.edit : quick_p.items.add];
+		const topItems: vscode.QuickPickItem[] = [];
+		if (showBoth) {
+			topItems.push(quick_p.items.add, quick_p.items.edit);
+		} else if (existing) {
+			topItems.push(quick_p.items.edit);
+		} else {
+			topItems.push(quick_p.items.add);
+		}
 
 		const lsItems = [
 			quick_p.items.jump,
@@ -133,9 +143,9 @@ export async function activate(context: vscode.ExtensionContext) {
 			quick_p.items.color
 		];
 
-		items.push(...lsItems);
-
-		qp.items = items;
+		const qp = vscode.window.createQuickPick();
+		qp.placeholder = 'Select Option';
+		qp.items = [...topItems, ...lsItems];
 
 		qp.onDidAccept(async () => {
 
@@ -146,13 +156,15 @@ export async function activate(context: vscode.ExtensionContext) {
 			if (!selected) { return; }
 
 			if (selected.label === 'Jump') {
-				// global jump menu
+				// global jump menu - deduplicate by id across all array slots
 				const uniqueMarkers = new Map<string, any>();
 				for (const filePath in configLoader.list) {
 					for (const line in configLoader.list[filePath]) {
-						const marker = configLoader.list[filePath][line];
-						// deduplicate by object reference or id
-						uniqueMarkers.set(marker.id, { marker, path: filePath });
+						const slot = configLoader.list[filePath][line];
+						const slotArr = Array.isArray(slot) ? slot : [slot];
+						for (const marker of slotArr) {
+							uniqueMarkers.set(marker.id, { marker, path: filePath });
+						}
 					}
 				}
 
@@ -183,77 +195,57 @@ export async function activate(context: vscode.ExtensionContext) {
 				return;
 			}
 
-			if (selected.label === 'Edit' && existing) {
-				// --- EDIT MODE: prefill and call recover ---
+			if (selected.label === 'Edit') {
+				// --- HIERARCHY-AWARE EDIT: if multiple markers, pick which one ---
+				let target = existing;
 
-				const options = await vscode.window.showQuickPick([
-					{
-						label: 'Edit Content',
-						description: 'e-ctt',
-					},
-					{
-						label: 'Edit Color',
-						description: 'e-color',
-					}
+				if (allAtLine.length > 1) {
+					// Let user choose which marker in the hierarchy to edit
+					const pickItems = allAtLine.map(m => ({
+						label: m.alt ? m.alt.substring(0, 30) : m.content.substring(0, 30),
+						description: `${m.range.start}::${m.range.end}  [${m.id}]`,
+						detail: `${m.range.start}::${m.range.end}`,
+						_marker: m
+					}));
+					const chosen = await (vscode.window.showQuickPick as any)(pickItems, { placeHolder: 'Which marker to edit?' });
+					if (!chosen) { return; }
+					target = chosen._marker;
+				}
+
+				if (!target) { return; }
+
+				const editOption = await vscode.window.showQuickPick([
+					{ label: 'Edit Content', description: 'e-ctt' },
+					{ label: 'Edit Color', description: 'e-color' }
 				], { placeHolder: 'Choose what to edit' });
 
-				if (!options) { return; }
+				if (!editOption) { return; }
 
-				if (options.description === 'e-ctt') {
-
-					const updated = await vscode.window.showInputBox({
-						value: existing.content,
-						prompt: 'Edit comment'
-					});
-
+				if (editOption.description === 'e-ctt') {
+					const updated = await vscode.window.showInputBox({ value: target.content, prompt: 'Edit comment' });
 					if (updated === undefined) { return; }
-
 					await exct.recover('n', toMarkerPath, {
-						range: existing.range,
-						path: currentPath,
-						color: existing.color,
-						content: updated,
-						alt: existing.alt,
-						id: existing.id,
-						gui: existing.gui
+						range: target.range, path: currentPath, color: target.color,
+						content: updated, alt: target.alt, id: target.id, gui: target.gui
 					});
-
 				}
 
-				if (options.description === 'e-color') {
-
+				if (editOption.description === 'e-color') {
 					const updated = await vscode.window.showQuickPick(color_p()!, { placeHolder: 'Select Color' });
-
 					if (!updated) { return; }
-
 					await exct.recover('n', toMarkerPath, {
-						range: existing.range,
-						path: currentPath,
-						color: updated.description,
-						content: existing.content,
-						alt: existing.alt,
-						id: existing.id,
-						gui: existing.gui
+						range: target.range, path: currentPath, color: updated.description!,
+						content: target.content, alt: target.alt, id: target.id, gui: target.gui
 					});
-
 				}
 
-
-			} else if (selected.label === 'Add' && !existing) {
+			} else if (selected.label === 'Add') {
 				// --- NEW COMMENT MODE ---
-				const content = await vscode.window.showInputBox({
-					prompt: 'Add comment'
-				});
-
+				const content = await vscode.window.showInputBox({ prompt: 'Add comment' });
 				const colorOption = await vscode.window.showQuickPick(color_p()!, { placeHolder: 'Select Color' });
-
 				if (!colorOption) { return; }
-
 				if (content === undefined) { return; }
-
-				const alt = await vscode.window.showInputBox({
-					prompt: 'Add alt text for highlight'
-				});
+				const alt = await vscode.window.showInputBox({ prompt: 'Add alt text for highlight' });
 
 				const generateId = () => {
 					const chars = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -271,26 +263,53 @@ export async function activate(context: vscode.ExtensionContext) {
 					content: content,
 					alt: alt ?? '',
 					id: generateId(),
-					gui: {
-						description: '',
-						relation: []
-					}
+					gui: { description: '', relation: [] }
 				});
+
 			} else if (selected.label === 'Refresh') {
 
 				await exct.refresh(configLoader.list);
 				vscode.window.showInformationMessage('Refreshed');
 
 			} else if (selected.label === 'Delete') {
-				const markerToDelete = configLoader.list[currentPath][currentLine.start];
 
-				// use for to delete multi-line highlight
-				if (markerToDelete) {
-					for (let l = markerToDelete.range.start; l <= markerToDelete.range.end; l++) {
+				// --- HIERARCHY-AWARE SMART DELETE ---
+				// Find the narrowest marker whose range EXACTLY covers the cursor (not just overlaps)
+				// If cursor is within a smaller inner marker -> delete only that one
+				// Otherwise -> delete the outermost one that starts at or before cursor
+
+				const slot = configLoader.list[currentPath]?.[currentLine.start];
+				const slotArr = Array.isArray(slot) ? slot : (slot ? [slot] : []);
+
+				if (slotArr.length === 0) { return; }
+
+				// Find the most specific (narrowest) marker that fully contains the cursor
+				const cursorStart = currentLine.start;
+				const cursorEnd = currentLine.end;
+
+				// Filter to markers that contain the cursor range
+				const candidates = slotArr.filter(m =>
+					m.range.start <= cursorStart && m.range.end >= cursorEnd
+				);
+
+				// If multiple candidates, pick narrowest (already sorted ascending by span)
+				const markerToDelete = candidates.length > 0 ? candidates[0] : slotArr[0];
+
+				// Delete only this specific marker by id from ALL its line slots
+				for (let l = markerToDelete.range.start; l <= markerToDelete.range.end; l++) {
+					const lineSlot = configLoader.list[currentPath]?.[l];
+					if (Array.isArray(lineSlot)) {
+						const idx = lineSlot.findIndex(m => m.id === markerToDelete.id);
+						if (idx !== -1) { lineSlot.splice(idx, 1); }
+						// Clean up empty slots
+						if (lineSlot.length === 0) { delete configLoader.list[currentPath][l]; }
+					} else {
 						delete configLoader.list[currentPath][l];
 					}
-					await exct.refresh(configLoader.list);
 				}
+
+				await exct.refresh(configLoader.list);
+
 			} else if (selected.label === 'Config') {
 
 				const options = await vscode.window.showQuickPick([
@@ -458,7 +477,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		const cursorLine = editor.selection.active.line; // 0-based
 
 		// 1. Check if the current line has a Marker
-		const existing = configLoader.list[currentPath]?.[cursorLine + 1];
+		const existing = configLoader.get(currentPath, { start: cursorLine + 1 });
 		if (!existing) {
 			vscode.window.showWarningMessage('.Marker: No marker found at cursor line to expand.');
 			return;
@@ -480,9 +499,16 @@ export async function activate(context: vscode.ExtensionContext) {
 			return; // Already expanded to limit, no redraw needed
 		}
 
-		// 4. Clean up old highlight memory
+		// 4. Clean up old highlight memory (remove this marker by id from its old range slots)
 		for (let l = existing.range.start; l <= existing.range.end; l++) {
-			delete configLoader.list[currentPath][l];
+			const lineSlot = configLoader.list[currentPath]?.[l];
+			if (Array.isArray(lineSlot)) {
+				const idx = lineSlot.findIndex(m => m.id === existing.id);
+				if (idx !== -1) { lineSlot.splice(idx, 1); }
+				if (lineSlot.length === 0) { delete configLoader.list[currentPath][l]; }
+			} else {
+				delete configLoader.list[currentPath][l];
+			}
 		}
 
 		// 5. Write the new expanded range
