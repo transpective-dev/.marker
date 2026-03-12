@@ -81,8 +81,8 @@ export class Executor {
         // refresh marker file
         if (!list) { return; }
         
-        
         console.log('we are in refresh');
+
         const lines: string[] = [];
         const seen = new Set<string>();
 

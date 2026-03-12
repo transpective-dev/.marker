@@ -42,7 +42,9 @@ export class configloader {
 
     public reload = () => {
         if (this.debounceTimer) { clearTimeout(this.debounceTimer); }
-        this.debounceTimer = setTimeout(() => this.loadData(), 300);
+        this.debounceTimer = setTimeout(() => {
+            this.loadData();
+        }, 300);
     };
 
     constructor(path: string) {

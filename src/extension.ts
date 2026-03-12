@@ -235,8 +235,47 @@ export async function activate(context: vscode.ExtensionContext) {
 				}
 			} else if (selected.label === 'Config') {
 
-				// open config file
-				await vscode.window.showTextDocument(vscode.Uri.file(toUserConfig));
+				const options = await vscode.window.showQuickPick([
+					{
+						label: 'Change Highlight Setting',
+						description: 'chs'
+					},
+					{
+						label: 'Open Config File',
+						description: 'ocf'
+					}
+				]);
+
+				if (!options) { return; };
+
+				switch (options.description) {
+					case 'chs':
+						const i = await vscode.window.showQuickPick([
+							{
+								label: 'text',
+								description: 'Only show inline text lenses'
+							},
+							{
+								label: 'HL',
+								description: 'Only show highlight decorations'
+							},
+							{
+								label: 'text/HL',
+								description: 'Show both inline text and highlights'
+							}
+						], { placeHolder: 'Select Highlight Mode' });
+
+						if (!i) return;
+
+						await userConfig.update('settings', 'chs', { path: toUserConfig, status: i.label });
+						updateHL(userConfig.high_light_status);
+						break;
+					case 'ocf':
+						// open config file
+						await vscode.window.showTextDocument(vscode.Uri.file(toUserConfig));
+						break;
+				}
+
 
 			} else if (selected.label === 'Color') {
 

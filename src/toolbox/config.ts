@@ -104,6 +104,25 @@ export class Config {
                 }
 
                 break;
+            case 'settings':
+                if (action === 'chs') {
+                    if (Config.configs) {
+                        Config.configs.settings.high_light_status = payloads.status;
+                    } else {
+                        Config.configs = {
+                            settings: { high_light_status: payloads.status },
+                            color: Config.colorLs
+                        };
+                    }
+
+                    const full = {
+                        settings: Config.configs.settings,
+                        color: Config.configs.color
+                    };
+
+                    await writeFile(payloads.path, JSON.stringify(full, null, 2));
+                }
+                break;
             default:
                 break;
         }
@@ -113,5 +132,5 @@ export class Config {
     public get high_light_status(): 'text' | 'HL' | 'text/HL' {
         return Config.configs?.settings.high_light_status || 'text/HL';
     }
-    
+
 }

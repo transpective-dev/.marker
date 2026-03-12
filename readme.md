@@ -30,7 +30,6 @@ We highly recommend this to people who are
 - Need customized comments for specific use cases
 
 
-preview:
 ![](https://github.com/transpective-dev/.marker/blob/main/readme/preview.png)
 
 ---
