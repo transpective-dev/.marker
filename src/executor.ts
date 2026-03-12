@@ -41,7 +41,7 @@ export class Executor {
             // Get relative path and normalize slashes
             let i = vscode.workspace.asRelativePath(uri, false).replace(/\\/g, '/');
 
-            const cleaned = i.replace(/^\.\//, '');
+            const cleaned = i.replace(/^(\.\/|\/)+/, '');
 
             return './' + cleaned;
         } catch {
